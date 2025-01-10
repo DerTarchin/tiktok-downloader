@@ -344,11 +344,17 @@ def remove_duplicates_from_groups(source_file, directory, dry_run=False):
 
 def print_final_summary(input_path, file_handler):
     """Print final summary statistics after processing is complete"""
-    # Count successfully downloaded videos
+    # Count successfully downloaded videos (deduped by video ID)
     success_count = 0
+    unique_video_ids = set()
     if os.path.exists(file_handler.success_log_path):
         with open(file_handler.success_log_path, 'r') as f:
-            success_count = sum(1 for line in f if line.strip())
+            for line in f:
+                if line.strip():
+                    video_id = extract_video_id(line.strip())
+                    if video_id:
+                        unique_video_ids.add(video_id)
+            success_count = len(unique_video_ids)
     
     # Count failed and private videos from error logs
     total_private = 0
@@ -407,7 +413,7 @@ def print_final_summary(input_path, file_handler):
     summary_text = "\n" + "="*50 + "\n"
     summary_text += "FINAL SUMMARY\n"
     summary_text += "="*50 + "\n"
-    summary_text += f"Total downloaded: {success_count:,}\n"
+    summary_text += f"Total unique videos downloaded: {success_count:,}\n"
     summary_text += f"Total private videos: {total_private:,}\n"
     summary_text += f"Total failed: {total_failed:,}\n"
     summary_text += f"Total size: {total_size}\n"
@@ -416,7 +422,8 @@ def print_final_summary(input_path, file_handler):
     # Print to console
     print(summary_text)
     
-    # Save to file
-    summary_path = os.path.join(os.path.dirname(input_path), "summary.log")
+    # Save to file (in current directory instead of parent)
+    summary_path = os.path.join(input_path if os.path.isdir(input_path) 
+                               else os.path.dirname(input_path), "summary.log")
     with open(summary_path, 'w') as f:
         f.write(summary_text)
