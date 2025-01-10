@@ -11,7 +11,9 @@ def list_files_without_extension(username: str) -> List[Tuple[str, str]]:
     Find all files without extensions in the remote directory.
     Returns a list of tuples (full_path, filename).
     """
+        
     remote_base = f"gdrive:/TikTok Archives/{username}"
+    print(f"Searching for files without extensions in: {remote_base}")
     
     try:
         # Use rclone to recursively list all files
@@ -41,15 +43,13 @@ def list_files_without_extension(username: str) -> List[Tuple[str, str]]:
         print(f"Unexpected error: {e}", file=sys.stderr)
         sys.exit(1)
 
-def delete_file(full_path: str) -> bool:
+def delete_file(full_path: str, username: str) -> bool:
     """Delete a file from the remote using rclone."""
     try:
-        # Construct the full rclone path and escape it properly
-        rclone_path = f"'{full_path}'"  # Quote the path
-        cmd = ["rclone", "deletefile", f"'gdrive:/TikTok Archives/{full_path}'"]
-        print(f"Running command: {' '.join(cmd)}")  # Debug print
-        # Use shell=True to maintain quotes and escaping
-        subprocess.run(' '.join(cmd), shell=True, check=True, capture_output=True)
+        # Construct the full rclone path with username included
+        rclone_path = f"gdrive:/TikTok Archives/{username}/{full_path}"
+        cmd = ["rclone", "deletefile", rclone_path]
+        subprocess.run(cmd, check=True, capture_output=True)
         return True
     except subprocess.CalledProcessError as e:
         print(f"Error deleting {full_path}: {e.stderr}", file=sys.stderr)
@@ -60,9 +60,14 @@ def main():
     parser.add_argument('username', help='Username whose archives to search')
     parser.add_argument('--dry-run', action='store_true', help='Only list files, do not delete')
     args = parser.parse_args()
+
+    username = args.username
+    # Extract username if a full path is provided
+    if '/' in username:
+        username = username.rstrip('/').split('/')[-1]
     
-    print(f"Searching for files without extensions in archives for user: {args.username}")
-    files = list_files_without_extension(args.username)
+    print(f"Searching for files without extensions in archives for user: {username}")
+    files = list_files_without_extension(username)
     
     if not files:
         print("No files without extensions found.")
@@ -79,11 +84,11 @@ def main():
     print("\nProceeding with deletion...")
     deleted_count = 0
     for full_path, _ in files:
-        if delete_file(full_path):
+        if delete_file(full_path, username):
             print(f"Deleted: {full_path}")
             deleted_count += 1
         
-    print(f"\nOperation complete. Deleted {deleted_count} of {len(files)} files.")
+    print(f"\nOperation complete. Deleted {deleted_count:,} of {len(files):,} files.")
 
 if __name__ == '__main__':
     main() 

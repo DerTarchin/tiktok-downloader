@@ -1,6 +1,7 @@
 """Utility functions for TikTok downloader."""
 
 import os
+import sys
 import re
 from urllib.parse import urlparse
 import time
@@ -154,6 +155,7 @@ def split_into_groups(urls, input_path, file_handler, start_group):
     Split URLs into group files and return the file paths.
     Preserves existing group files and their contents.
     Creates missing group files if needed.
+    Ensures no duplicates exist in source files before adding to groups.
     
     Args:
         urls: List of URLs to split into groups
@@ -175,6 +177,24 @@ def split_into_groups(urls, input_path, file_handler, start_group):
     group_to_urls = {}
     print("Scanning for existing group files...")
     
+    # First check source files for duplicates
+    print("Checking source files for duplicates...")
+    source_video_ids = set()
+    text_files = [f for f in os.listdir(input_path) 
+                 if f.endswith(".txt") 
+                 and not f.startswith(file_handler.error_prefix)
+                 and not f.startswith(file_handler.all_saves_name)
+                 and f != "Favorite Videos (URLs).txt"]
+    
+    for source_file in text_files:
+        source_path = os.path.join(input_path, source_file)
+        with open(source_path, 'r') as f:
+            source_links = [url.strip() for url in f.readlines() if url.strip()]
+            source_video_ids.update(extract_video_id(url) for url in source_links)
+    
+    print(f"Found {len(source_video_ids):,} existing video IDs in source files")
+    
+    # Now check existing group files
     for file in os.listdir(input_path):
         if file.startswith(f"{file_handler.all_saves_name} (Group ") and file.endswith(").txt"):
             file_path = os.path.join(input_path, file)
@@ -197,17 +217,19 @@ def split_into_groups(urls, input_path, file_handler, start_group):
     
     print(f"Found {len(group_files):,} existing group files")
     print(f"Found {len(existing_urls):,} existing URLs")
-    # Find URLs that aren't in any existing group
+    
+    # Find URLs that aren't in any existing group or source file
     print("Checking for new URLs...")
     new_urls = []
     
     for url in urls:
         video_id = extract_video_id(url)
-        is_new = video_id not in existing_video_ids  # Much faster comparison
+        # Check against both group files and source files
+        is_new = video_id not in existing_video_ids and video_id not in source_video_ids
         if is_new:
             new_urls.append(url)
     print(f"Found {len(new_urls):,} new URLs to process")
-    
+
     if not new_urls and group_files:
         print("No new URLs to process - using existing group files")
         return sorted(group_files)
@@ -250,38 +272,42 @@ def split_into_groups(urls, input_path, file_handler, start_group):
             group_files.append(group_file)
     
     print(f"Finished creating {len(group_files):,} total group files")
-    return sorted(group_files)  # Return all files (existing + new) in sorted order 
+    return sorted(group_files)  # Return all files (existing + new) in sorted order
 
-def remove_duplicates_from_groups(source_file_path, input_dir):
+def remove_duplicates_from_groups(source_file, directory, dry_run=False):
     """
     Remove links from uncategorized group files if they exist in the source file.
     
     Args:
-        source_file_path (str): Path to the source file containing links that should be unique
-        input_dir (str): Directory containing the group files to clean
+        source_file (str): Path to the source file containing links
+        directory (str): Directory containing the group files to check
+        dry_run (bool): If True, only simulate the changes without writing to files
+    
+    Returns:
+        int: Number of links removed from group files
     """
     # Read source file links
-    with open(source_file_path, 'r') as f:
+    with open(source_file, 'r') as f:
         source_links = set(url.strip() for url in f.readlines() if url.strip())
         source_video_ids = set(extract_video_id(url) for url in source_links)
 
     # Print which file we're processing
-    print(f"\nProcessing source file: {os.path.basename(source_file_path)}")
+    print(f"\nProcessing source file: {os.path.basename(source_file)}")
     print(f"Found {len(source_links):,} links in source file")
     
     # Find all group files
-    group_files = [f for f in os.listdir(input_dir) 
+    group_files = [f for f in os.listdir(directory) 
                   if f.endswith('.txt') and ' (Group ' in f and not f.startswith('[error')]
     
     if not group_files:
         print("No group files found.")
-        return
+        return 0
     
-    print(f"\nProcessing {len(group_files):,} group files...")
+    print(f"Processing {len(group_files):,} group files...")
     total_removed = 0
     
     for group_file in group_files:
-        group_path = os.path.join(input_dir, group_file)
+        group_path = os.path.join(directory, group_file)
         with open(group_path, 'r') as f:
             group_links = [url.strip() for url in f.readlines() if url.strip()]
         
@@ -304,14 +330,16 @@ def remove_duplicates_from_groups(source_file_path, input_dir):
                 if video_id in source_video_ids:
                     print(f"\t{video_id}")
             
-            with open(group_path, 'w') as f:
-                f.write('\n'.join(filtered_links))
-                if filtered_links:  # Add final newline if file is not empty
-                    f.write('\n')
-            
+            if not dry_run:
+                # Write the filtered links back to the group file
+                with open(group_path, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(filtered_links))
             total_removed += removed_count
+            
+            action = "Would remove" if dry_run else "Removed"
+            print(f"{action} {removed_count} links from {group_file}")
     
-    print(f"\nTotal links removed: {total_removed}")
+    print(f"Total links removed: {total_removed}")
     return total_removed
 
 def print_final_summary(input_path, file_handler):
@@ -375,12 +403,20 @@ def print_final_summary(input_path, file_handler):
     except Exception as e:
         total_size = f"Unable to determine: {str(e)}"
     
-    # Print summary
-    print("\n" + "="*50)
-    print("FINAL SUMMARY")
-    print("="*50)
-    print(f"Total downloaded: {success_count:,}")
-    print(f"Total private videos: {total_private:,}")
-    print(f"Total failed: {total_failed:,}")
-    print(f"Total size: {total_size}")
-    print("="*50 + "\n")
+    # Create summary text
+    summary_text = "\n" + "="*50 + "\n"
+    summary_text += "FINAL SUMMARY\n"
+    summary_text += "="*50 + "\n"
+    summary_text += f"Total downloaded: {success_count:,}\n"
+    summary_text += f"Total private videos: {total_private:,}\n"
+    summary_text += f"Total failed: {total_failed:,}\n"
+    summary_text += f"Total size: {total_size}\n"
+    summary_text += "="*50 + "\n"
+    
+    # Print to console
+    print(summary_text)
+    
+    # Save to file
+    summary_path = os.path.join(os.path.dirname(input_path), "summary.log")
+    with open(summary_path, 'w') as f:
+        f.write(summary_text)

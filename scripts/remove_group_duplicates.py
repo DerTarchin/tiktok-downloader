@@ -18,12 +18,17 @@ from downloader.utils import remove_duplicates_from_groups
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python remove_group_duplicates.py <input_directory>")
+        print("Usage: python remove_group_duplicates.py <input_directory> [--dry-run]")
         print("\nExample:")
         print("python remove_group_duplicates.py dertarchin")
+        print("python remove_group_duplicates.py dertarchin --dry-run")
         sys.exit(1)
 
     input_dir = sys.argv[1]
+    dry_run = "--dry-run" in sys.argv
+    
+    if dry_run:
+        print("Dry run mode - no changes will be made")
     
     if not os.path.isdir(input_dir):
         print(f"Error: '{input_dir}' is not a directory.")
@@ -50,11 +55,12 @@ def main():
         total_removed = 0
         for source_file in text_files:
             source_path = os.path.join(input_dir, source_file)
-            removed = remove_duplicates_from_groups(source_path, input_dir)
+            removed = remove_duplicates_from_groups(source_path, input_dir, dry_run=dry_run)
             total_removed += removed
             
         if total_removed > 0:
-            print(f"\nSuccess! {total_removed} total links have been removed from group files.")
+            action = "would be" if dry_run else "have been"
+            print(f"\nSuccess! {total_removed:,} total links {action} removed from group files.")
         else:
             print("\nNo duplicate links were found in group files.")
             

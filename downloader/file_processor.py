@@ -74,7 +74,9 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         video_urls_list = sorted(list(video_urls))  # Convert set to sorted list
         for i in range(0, len(video_urls_list), BATCH_SIZE):
             batch = video_urls_list[i:i + BATCH_SIZE]
-            print(f"\n\tVideo Batch {i//BATCH_SIZE + 1} of {(len(video_urls_list) + BATCH_SIZE - 1)//BATCH_SIZE}:")
+            current_batch = i//BATCH_SIZE + 1
+            total_batches = (len(video_urls_list) + BATCH_SIZE - 1)//BATCH_SIZE
+            print(f"\n\tVideo Batch {current_batch:,} of {total_batches:,}:")
             
             # Show what's being processed
             for idx, url in enumerate(batch, 1):

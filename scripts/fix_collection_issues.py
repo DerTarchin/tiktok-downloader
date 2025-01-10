@@ -71,6 +71,82 @@ def remove_from_success_log(success_log_path, video_id):
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
+def move_videos_batch(moves, is_remote=False, batch_size=40):
+    """Move multiple video files in a batch. Returns a dict of {video_id: success_bool}."""
+    if not moves or not is_remote:
+        return {}
+    
+    results = {}
+    total_batches = (len(moves) + batch_size - 1) // batch_size
+    
+    print(f"\nProcessing {len(moves):,} moves in {total_batches:,} batches of up to {batch_size:,} files each...")
+    
+    # Process moves in batches
+    for batch_num, i in enumerate(range(0, len(moves), batch_size), 1):
+        batch_items = list(moves.items())[i:i + batch_size]
+        
+        # Separate files with special characters
+        special_chars = {'{', '[', '(', ')', '}', ']'}
+        normal_batch = []
+        special_batch = []
+        
+        for video_id, (src_path, dest_path) in batch_items:
+            filename = os.path.basename(src_path)
+            if any(char in filename for char in special_chars):
+                special_batch.append((video_id, (src_path, dest_path)))
+            else:
+                normal_batch.append((video_id, (src_path, dest_path)))
+        
+        print(f"\nProcessing batch {batch_num:,}/{total_batches:,} ({len(batch_items):,} files)...")
+        
+        # Process files with special characters individually
+        if special_batch:
+            print(f"\nProcessing {len(special_batch):,} files with special characters individually...")
+            for video_id, (src_path, dest_path) in special_batch:
+                print(f"Moving (special chars): {src_path}\n\t-> {dest_path}")
+                success = move_video(src_path, dest_path, video_id, is_remote=True)
+                results[video_id] = success
+                print(f"{'✓' if success else '✗'} Individual move {'succeeded' if success else 'failed'}")
+        
+        # Process remaining files in batch
+        if normal_batch:
+            print(f"\nProcessing {len(normal_batch):,} files in batch...")
+            
+            # Print individual file moves
+            for video_id, (src_path, dest_path) in normal_batch:
+                print(f"Moving: {src_path}\n\t-> {dest_path}")
+            
+            # Prepare rclone batch command
+            cmd = ["rclone", "move"]
+            for video_id, (src_path, dest_path) in normal_batch:
+                cmd.extend(["--include", os.path.basename(src_path)])
+            
+            first_src = os.path.dirname(normal_batch[0][1][0])
+            first_dest = os.path.dirname(normal_batch[0][1][1])
+            cmd.extend([first_src, first_dest])
+            
+            # Execute the batch move
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                print(f"✓ Batch {batch_num} completed successfully")
+                for video_id, _ in normal_batch:
+                    results[video_id] = True
+            else:
+                print(f"✗ Batch {batch_num} failed")
+                print("Error output:", result.stderr)
+                print("\nAttempting individual moves for failed batch...")
+                
+                # Try moving files individually
+                for video_id, (src_path, dest_path) in normal_batch:
+                    print(f"Attempting individual move: {src_path}")
+                    success = move_video(src_path, dest_path, video_id, is_remote=True)
+                    results[video_id] = success
+                    print(f"{'✓' if success else '✗'} Individual move {'succeeded' if success else 'failed'}")
+    
+    print(f"\nBatch processing complete. {sum(results.values()):,} successful, {len(results) - sum(results.values()):,} failed")
+    return results
+
 def main():
     parser = argparse.ArgumentParser(description='Validate and fix TikTok downloads')
     parser.add_argument('input_path', help='Path to the directory containing collections')
@@ -117,33 +193,43 @@ def main():
         videos_processed += 1
         current_percentage = (videos_processed * 100) // total_videos
         if current_percentage % 5 == 0 and current_percentage != last_percentage:
-            print(f"\nProgress: {current_percentage}% ({videos_processed}/{total_videos} videos processed)")
+            print(f"\nProgress: {current_percentage}% ({videos_processed:,}/{total_videos:,} videos processed)")
             last_percentage = current_percentage
 
-    print(f"\nStarting to process {total_videos} videos...")
+    print(f"\nStarting to process {total_videos:,} videos...")
 
     # Process moves first
+    pending_moves = {}  # {video_id: (src_path, dest_path)}
+    
     for video_id, (from_collection, to_collection) in videos_to_move.items():
-        print(f"\nMoving video {video_id} from {from_collection} to {to_collection}")
-        
         # Get the filename from the extra videos map
-        filename = results['extra'][from_collection][video_id].split(' ', 1)[1]  # Remove (local) or (remote) prefix
+        filename = results['extra'][from_collection][video_id].split(' ', 1)[1]
         is_remote = results['extra'][from_collection][video_id].startswith('(remote)')
         
         # Construct paths
-        from_dir = os.path.join(args.input_path, from_collection)
-        to_dir = os.path.join(args.input_path, to_collection)
-        
         if is_remote:
             from_path = f"{args.gdrive_base_path}/{os.path.basename(args.input_path)}/{from_collection}/{filename}"
             to_path = f"{args.gdrive_base_path}/{os.path.basename(args.input_path)}/{to_collection}/{filename}"
+            pending_moves[video_id] = (from_path, to_path)
         else:
-            from_path = os.path.join(from_dir, filename)
-            to_path = os.path.join(to_dir, filename)
+            from_path = os.path.join(args.input_path, from_collection, filename)
+            to_path = os.path.join(args.input_path, to_collection, filename)
+            if not args.dry_run:
+                if move_video(from_path, to_path, video_id, False):
+                    print(f"Successfully moved video {video_id}")
+                    del results['extra'][from_collection][video_id]
+                else:
+                    print(f"Failed to move video {video_id}")
+                update_progress()
+
+    # Process remote moves in batches
+    if pending_moves and not args.dry_run:
+        move_results = move_videos_batch(pending_moves, is_remote=True)
         
-        if not args.dry_run:
-            if move_video(from_path, to_path, video_id, is_remote):
+        for video_id, success in move_results.items():
+            if success:
                 print(f"Successfully moved video {video_id}")
+                from_collection = videos_to_move[video_id][0]
                 del results['extra'][from_collection][video_id]
             else:
                 print(f"Failed to move video {video_id}")

@@ -114,10 +114,12 @@ class SyncHandler:
                 return False
         
         # Add check and rename for files starting with period or space
+        was_renamed = False  # Initialize the variable
         for filename in os.listdir(local_path):
-            was_renamed
+            was_renamed = False  # Reset for each file
             if filename.startswith('.'):
                 new_filename = '_' + filename
+                was_renamed = True
             elif filename.startswith(' '):
                 new_filename = filename.lstrip()
                 was_renamed = True
