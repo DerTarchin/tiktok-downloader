@@ -35,9 +35,9 @@ def main():
                 concurrent_downloads = int(sys.argv[i + 1])
                 if concurrent_downloads < 1:
                     concurrent_downloads = 1
-                elif concurrent_downloads > 3:  # Changed from 5 to 3
+                elif concurrent_downloads > 5:
                     print("Warning: High concurrency may trigger rate limiting. Limiting to 3 concurrent downloads.")
-                    concurrent_downloads = 3
+                    concurrent_downloads = 5
             except ValueError:
                 print("Warning: Invalid concurrent downloads value. Using default (2).")
     
