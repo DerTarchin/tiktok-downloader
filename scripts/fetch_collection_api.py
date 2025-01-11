@@ -89,27 +89,21 @@ def get_headers() -> dict:
         "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     }
 
-def fetch_collection_items(collection_url: str, output_file: str = None) -> List[str]:
+def fetch_collection_items(collection_id: str) -> List[str]:
     """
-    Fetch all items from a TikTok collection using their web API.
+    Fetch all video IDs from a TikTok collection using their web API.
     
     Args:
-        collection_url: URL of the TikTok collection
-        output_file: Optional file to save the video URLs to
+        collection_id: ID of the TikTok collection
         
     Returns:
-        List of video URLs from the collection
+        List of video IDs from the collection
     """
-    collection_id = extract_collection_id(collection_url)
-    if not collection_id:
-        raise ValueError(f"Could not extract collection ID from URL: {collection_url}")
-    
-    print(f"Fetching collection ID: {collection_id}")
     
     base_url = "https://www.tiktok.com/api/collection/item_list/"
     cursor = "0"
     has_more = True
-    video_urls = []
+    video_ids = []
     page = 1
     
     while has_more:
@@ -117,7 +111,7 @@ def fetch_collection_items(collection_url: str, output_file: str = None) -> List
         headers = get_headers()
         
         try:
-            print(f"\nFetching page {page}...")
+            print(f"Page {page}...")
             response = requests.get(base_url, params=params, headers=headers)
             response.raise_for_status()
             data = response.json()
@@ -132,9 +126,10 @@ def fetch_collection_items(collection_url: str, output_file: str = None) -> List
             for item in items:
                 video_id = item.get("video", {}).get("id")
                 if video_id:
-                    video_url = f"https://www.tiktok.com/video/{video_id}"
-                    video_urls.append(video_url)
-                    print(f"Found video: {video_url}")
+                    video_ids.append(video_id)
+                    # print(f"Found video ID: {video_id}")
+
+            print(f"{len(items)} ids found")
             
             # Check if there are more items
             has_more = data.get("hasMore", False)
@@ -150,26 +145,18 @@ def fetch_collection_items(collection_url: str, output_file: str = None) -> List
                 print(f"Response text: {e.response.text}")
             break
     
-    print(f"\nTotal videos found: {len(video_urls)}")
-    
-    # Save to file if specified
-    if output_file:
-        with open(output_file, 'w') as f:
-            for url in video_urls:
-                f.write(f"{url}\n")
-        print(f"Saved URLs to: {output_file}")
-    
-    return video_urls
+    print(f"\nTotal videos found: {len(video_ids)}")
+    return video_ids
 
 def main():
     parser = argparse.ArgumentParser(description='Fetch TikTok collection videos using web API')
-    parser.add_argument('collection_url', help='URL of the TikTok collection')
-    parser.add_argument('-o', '--output', help='Output file to save URLs to')
+    parser.add_argument('collection_id', help='ID of the TikTok collection')
     
     args = parser.parse_args()
     
     try:
-        fetch_collection_items(args.collection_url, args.output)
+        video_ids = fetch_collection_items(args.collection_id)
+        print(f"Found {len(video_ids)} video IDs")
     except Exception as e:
         print(f"Error: {e}")
         return 1

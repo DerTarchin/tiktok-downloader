@@ -4,6 +4,9 @@ import json
 from typing import List, Optional, Dict
 from urllib.parse import urlparse, parse_qs
 import os
+from fetch_collection_api import fetch_collection_items
+import argparse
+import sys
 
 def get_default_headers():
     """Get default headers for TikTok API requests."""
@@ -280,8 +283,8 @@ def fetch_collections(username: str) -> List[Dict]:
             cursor = data.get('cursor', 0)
             has_more = data.get('hasMore', False)
             
-            print(f"Found {len(items)} collections on this page")
-            print(f"Next cursor: {cursor}")
+            print(f"Found {len(items):,} collections on this page")
+            print(f"Next cursor: {cursor:,}")
             print(f"Has more: {has_more}")
                 
         except Exception as e:
@@ -292,152 +295,59 @@ def fetch_collections(username: str) -> List[Dict]:
             
     return collections
 
-def fetch_collection_videos(collection_id: str) -> List[str]:
-    """Fetch all video IDs from a collection."""
-    video_ids = []
-    cursor = 0
-    has_more = True
-    
-    # Create a new session for video fetching
-    session = requests.Session()
-    
-    # Headers for video fetching
-    headers = {
-        'authority': 'www.tiktok.com',
-        'accept': '*/*',
-        'accept-encoding': 'gzip, deflate, br, zstd',
-        'accept-language': 'en-US,en;q=0.9',
-        'cache-control': 'no-cache',
-        'dnt': '1',
-        'pragma': 'no-cache',
-        'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"macOS"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-    }
-    
-    while has_more:
-        params = {
-            'WebIdLastTime': '1736604666',
-            'aid': '1988',
-            'appId': '1988',
-            'app_language': 'en',
-            'app_name': 'tiktok_web',
-            'browser_language': 'en-US',
-            'browser_name': 'Mozilla',
-            'browser_online': 'true',
-            'browser_platform': 'MacIntel',
-            'browser_version': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            'channel': 'tiktok_web',
-            'collectionId': collection_id,
-            'cookie_enabled': 'true',
-            'count': '30',
-            'cursor': str(cursor),
-            'data_collection_enabled': 'false',
-            'device_platform': 'web_pc',
-            'focus_state': 'true',
-            'from_page': 'user',
-            'history_len': '2',
-            'is_fullscreen': 'false',
-            'is_page_visible': 'true',
-            'language': 'en',
-            'os': 'mac',
-            'priority_region': 'US',
-            'region': 'US',
-            'screen_height': '1329',
-            'screen_width': '2056',
-            'tz_name': 'America/New_York',
-            'webcast_language': 'en'
-        }
-        
-        try:
-            response = session.get(
-                'https://www.tiktok.com/api/collection/item_list/',
-                headers=headers,
-                params=params
-            )
-            response.raise_for_status()
-            
-            print(f"\nRequest URL: {response.url}")
-            print(f"Response status: {response.status_code}")
-            print(f"Response headers: {dict(response.headers)}")
-            
-            data = response.json()
-            
-            items = data.get('itemList', [])
-            if not items:
-                break
-                
-            for item in items:
-                if 'id' in item:
-                    video_ids.append(item['id'])
-            
-            cursor = data.get('cursor', 0)
-            has_more = data.get('hasMore', False)
-            
-            print(f"Found {len(items)} videos on this page")
-            print(f"Next cursor: {cursor}")
-            print(f"Has more: {has_more}")
-                
-        except Exception as e:
-            print(f"Error fetching videos: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                print(f"Response status: {e.response.status_code}")
-                print(f"Response headers: {dict(e.response.headers)}")
-                print(f"Response content: {e.response.content}")
-            break
-            
-    return video_ids
-
 def format_video_url(video_id: str) -> str:
     """Format video ID into shareable URL."""
     return f"https://tiktokv.com/share/video/{video_id}"
 
-def sanitize_filename(filename: str) -> str:
-    """Remove invalid characters from filename."""
-    return "".join(c for c in filename if c.isalnum() or c in (' ', '-', '_')).strip()
-
 def main():
     """Main function to run the script."""
-    username = input("Enter TikTok username: ")
+    parser = argparse.ArgumentParser(description='Fetch all collections for a TikTok user')
+    parser.add_argument('username', help='TikTok username to fetch collections from')
+    args = parser.parse_args()
     
     try:
-        print(f"\nFetching collections for user @{username}...")
-        collections = fetch_collections(username)
+        print(f"\nFetching collections for user @{args.username}...")
+        collections = fetch_collections(args.username)
         
         if not collections:
             print("No collections found for this user")
-            return
+            return 1
             
-        print(f"\nFound {len(collections)} collections")
+        print(f"\nFound {len(collections):,} collections")
         
         # Create output directory if it doesn't exist
-        output_dir = f"collections_{username}"
+        output_dir = f"collections_{args.username}"
         os.makedirs(output_dir, exist_ok=True)
         
         # Process each collection
         for collection in collections:
             collection_name = collection['name']
             collection_id = collection['id']
-            safe_name = sanitize_filename(collection_name)
+            safe_name = collection_name
             
             print(f"\nProcessing collection: {collection_name} ({collection_id})")
-            video_ids = fetch_collection_videos(collection_id)
+            
+            # Use fetch_collection_items from fetch_collection_api.py
+            video_ids = fetch_collection_items(collection_id)
             
             if video_ids:
                 output_file = os.path.join(output_dir, f"{safe_name}.txt")
                 with open(output_file, 'w') as f:
                     for vid_id in video_ids:
                         f.write(format_video_url(vid_id) + '\n')
-                print(f"Saved {len(video_ids)} video URLs to {output_file}")
+                print(f"Saved {len(video_ids):,} video URLs to {output_file}")
             else:
                 print("No videos found in this collection")
+        # Print summary
+        total_videos = sum(len(fetch_collection_items(c['id'])) for c in collections)
+        print(f"\nSummary:")
+        print(f"Total collections: {len(collections):,}")
+        print(f"Total videos: {total_videos:,}")
+        return 0
             
     except Exception as e:
         print(f"Error: {e}")
+        return 1
 
 if __name__ == "__main__":
-    main() 
+    sys.exit(main()) 
