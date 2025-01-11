@@ -96,29 +96,45 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                         try:
                             selenium_handler.download_with_selenium(url, output_folder, file_handler)
                         except Exception as e:
-                            print(f"\t  ❌ Selenium failed: {str(e)}")
-                            file_handler.log_error(url, error_file_path)
+                            if str(e) == "private":
+                                print(f"\t  ❌ Private video: {url}")
+                                file_handler.log_error(url, error_file_path, is_private=True)
+                            else:
+                                print(f"\t  ❌ Selenium failed: {str(e)}")
+                                file_handler.log_error(url, error_file_path)
                     elif error_msg == "network":
                         print(f"\t  ⚠️ Network error, using Selenium: {url}")
                         try:
                             selenium_handler.download_with_selenium(url, output_folder, file_handler)
                         except Exception as e:
-                            print(f"\t  ❌ Selenium failed: {str(e)}")
-                            file_handler.log_error(url, error_file_path)
+                            if str(e) == "private":
+                                print(f"\t  ❌ Private video: {url}")
+                                file_handler.log_error(url, error_file_path, is_private=True)
+                            else:
+                                print(f"\t  ❌ Selenium failed: {str(e)}")
+                                file_handler.log_error(url, error_file_path)
                     elif error_msg == "audio_only":
                         print(f"\t  ⚠️ Audio-only, using Selenium: {url}")
                         try:
                             selenium_handler.download_with_selenium(url, output_folder, file_handler)
                         except Exception as e:
-                            print(f"\t  ❌ Selenium failed: {str(e)}")
-                            file_handler.log_error(url, error_file_path)
+                            if str(e) == "private":
+                                print(f"\t  ❌ Private video: {url}")
+                                file_handler.log_error(url, error_file_path, is_private=True)
+                            else:
+                                print(f"\t  ❌ Selenium failed: {str(e)}")
+                                file_handler.log_error(url, error_file_path)
                     elif not success:
                         print(f"\t  ⚠️  yt-dlp failed ({error_msg}), using Selenium: {url}")
                         try:
                             selenium_handler.download_with_selenium(url, output_folder, file_handler)
                         except Exception as e:
-                            print(f"\t  ❌ Selenium failed: {str(e)}")
-                            file_handler.log_error(url, error_file_path)
+                            if str(e) == "private":
+                                print(f"\t  ❌ Private video: {url}")
+                                file_handler.log_error(url, error_file_path, is_private=True)
+                            else:
+                                print(f"\t  ❌ Selenium failed: {str(e)}")
+                                file_handler.log_error(url, error_file_path)
                     else:
                         file_handler.log_successful_download(url)
             except Exception as e:
@@ -137,8 +153,12 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                 selenium_handler.download_with_selenium(url, output_folder, file_handler)
                 file_handler.log_successful_download(url)
             except Exception as e:
-                print(f"\t  ❌ Photo download failed: {str(e)}")
-                file_handler.log_error(url, error_file_path)
+                if str(e) == "private":
+                    print(f"\t  ❌ Private photo: {url}")
+                    file_handler.log_error(url, error_file_path, is_private=True)
+                else:
+                    print(f"\t  ❌ Photo download failed: {str(e)}")
+                    file_handler.log_error(url, error_file_path)
 
     # After processing all URLs, queue the folder for syncing
     if os.path.isdir(output_folder):
@@ -215,23 +235,21 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                     
                     if error_msg == "private":
                         print(f"\t-> Video not available: {url}")
-                        # Update the URL to mark as private in the file
+                        # Check if URL already exists in error log
+                        target_video_id = extract_video_id(url)
                         with open(error_file_path, 'r') as f:
                             lines = f.readlines()
+                        # Remove any existing entries for this video ID
                         with open(error_file_path, 'w') as f:
                             for line in lines:
-                                if line.strip() == url:
-                                    file_handler.log_error(url, error_file_path, is_private=True)
-                                else:
+                                line_url = line.strip().replace(' (private)', '')
+                                if extract_video_id(line_url) != target_video_id:
                                     f.write(line)
+                        # Now log the error as private
+                        file_handler.log_error(url, error_file_path, is_private=True)
                         continue
-                    
-                    if not success:
-                        # Try Selenium as backup
-                        print(f"\t-> yt-dlp failed, trying Selenium")
-                        selenium_handler.download_with_selenium(url, output_folder, file_handler)
-                        success = True
-                
+                    raise
+            
             except Exception as e:
                 print(f"\t-> Retry failed: {e}")
                 success = False

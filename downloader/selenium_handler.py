@@ -191,9 +191,10 @@ class SeleniumHandler:
                 raise Exception("URL is neither a photo nor a video post")
 
         except Exception as e:
-            print(f"\t-> Failed to download: {url}")
-            print(f"\t-> Current page URL: {self.driver.current_url}")
-            print(f"\t-> Error details: {e}")
+            if str(e) != "private":
+                print(f"\t-> Failed to download: {url}")
+                print(f"\t-> Current page URL: {self.driver.current_url}")
+                print(f"\t-> Error details: {e}")
             raise
 
         # After successful download
@@ -208,7 +209,7 @@ class SeleniumHandler:
             convert_button.click()
             
             # Wait for new file to appear in temp downloads directory
-            max_wait = 30
+            max_wait = 60
             start_time = time.time()
             while time.time() - start_time < max_wait:
                 downloaded_files = os.listdir(self.temp_download_dir)
@@ -235,13 +236,38 @@ class SeleniumHandler:
     def _handle_video_download(self, url, output_folder, video_id_suffix):
         """Handle video download process"""
         try:
-            download_button = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, 'a[data-event="hd_download_click"]'))
-            )
+            # Create a condition to check for either the download button or private video message
+            private_video = False
+            
+            def check_elements():
+                try:
+                    # Check for private video message
+                    toast = self.driver.find_element(By.CSS_SELECTOR, 'div.toast')
+                    if "Video is private or removed!" in toast.text:
+                        nonlocal private_video
+                        private_video = True
+                        return True
+                    
+                    # Check for download button
+                    download_button = self.driver.find_element(By.CSS_SELECTOR, 'a[data-event="hd_download_click"]')
+                    return download_button.is_displayed()
+                except:
+                    return False
+
+            # Wait for either element to appear
+            WebDriverWait(self.driver, 10).until(lambda d: check_elements())
+            
+            # If private video was found, raise appropriate exception
+            if private_video:
+                raise Exception("private")
+
+            # Get the download button (we know it exists if we got here)
+            download_button = self.driver.find_element(By.CSS_SELECTOR, 'a[data-event="hd_download_click"]')
             download_url = download_button.get_attribute("href")
             if not download_url:
                 raise Exception("Download button found but href attribute is empty")
 
+            # Rest of the existing download logic
             uploader = self.get_uploader_from_page(url)
             description = self._get_video_description()
             
@@ -270,7 +296,9 @@ class SeleniumHandler:
                     raise Exception(f"Curl download failed with error: {result.stderr}")
                     
         except Exception as e:
-            if "href attribute is empty" not in str(e):
+            if str(e) == "private":
+                raise Exception("private")
+            elif "href attribute is empty" not in str(e):
                 print(f"\t-> Failed at: Video download process")
                 print(f"\t-> Looking for element: CSS 'a[data-event=\"hd_download_click\"]'")
             raise

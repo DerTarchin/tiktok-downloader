@@ -427,3 +427,10 @@ def print_final_summary(input_path, file_handler):
                                else os.path.dirname(input_path), "summary.log")
     with open(summary_path, 'w') as f:
         f.write(summary_text)
+    
+    print("\n --- message template --- \n")
+    print("Great news! Your videos are ready :)")
+    print("Here's the temporary link to them in google drive:")
+    print("\n --- LINK HERE --- \n")
+    print("You can download them from there and save them to your computer. Please do so as soon as you can, and let me know when you're done, because i'd like to have that space available again to help other TikTokers")
+    

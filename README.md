@@ -87,11 +87,20 @@ python main.py path/to/directory --errors-only
 # Disable headless mode (show browser)
 python main.py path/to/directory --disable-headless
 
-# Split uncategorized videos into groups
-python main.py path/to/directory --split-uncategorized
+# Control concurrent downloads (default: 3, max: 5)
+python main.py path/to/directory --concurrent 4
 
-# Combine flags
-python main.py path/to/directory --disable-headless --split-uncategorized
+# Skip download validation step
+python main.py path/to/directory --skip-validation
+
+# Skip private videos
+python main.py path/to/directory --skip-private
+
+# Keep all uncategorized videos in one file (overrides default group splitting)
+python main.py path/to/directory --combine-uncategorized
+
+# Combine multiple flags
+python main.py path/to/directory --disable-headless --concurrent 4 --skip-validation
 ```
 
 The script will:
@@ -224,3 +233,19 @@ The script will:
 - Remove the leading dot from the filename
 - Report each rename operation
 - Show a summary of total files renamed
+
+### count_unique_videos.py
+
+A utility script to count how many unique videos will be downloaded from text files in a directory. It analyzes video IDs across all text files (excluding error logs) to provide an accurate count of unique videos.
+
+```bash
+# Count unique videos in a directory
+python scripts/count_unique_videos.py path/to/directory
+```
+
+The script will:
+
+- Process all non-log text files in the specified directory
+- Extract and analyze video IDs from URLs
+- Count unique videos across all files
+- Display the total number of unique videos to be downloaded

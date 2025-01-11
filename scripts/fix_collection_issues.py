@@ -154,6 +154,8 @@ def main():
                       help='Base path in Google Drive (default: gdrive:/TikTok Archives)')
     parser.add_argument('--dry-run', action='store_true',
                       help='Show what would be done without making changes')
+    parser.add_argument('--skip-move', action='store_true',
+                      help='Skip moving videos to fix missing entries, just delete extras')
 
     args = parser.parse_args()
 
@@ -175,16 +177,17 @@ def main():
     videos_to_move = {}  # {video_id: (from_collection, to_collection)}
     
     # First pass: identify videos that can be moved to fix missing entries
-    for collection, missing_ids in results['missing'].items():
-        for video_id in missing_ids:
-            # Check if this missing video exists as an extra in another collection
-            for other_collection, extra_videos in results['extra'].items():
-                if video_id in extra_videos:
-                    videos_to_move[video_id] = (other_collection, collection)
-                    break
+    if not args.skip_move:  # Only process moves if --skip-move is not set
+        for collection, missing_ids in results['missing'].items():
+            for video_id in missing_ids:
+                # Check if this missing video exists as an extra in another collection
+                for other_collection, extra_videos in results['extra'].items():
+                    if video_id in extra_videos:
+                        videos_to_move[video_id] = (other_collection, collection)
+                        break
 
     # Calculate total videos to process
-    total_videos = len(videos_to_move) + sum(len(videos) for videos in results['extra'].values())
+    total_videos = (len(videos_to_move) if not args.skip_move else 0) + sum(len(videos) for videos in results['extra'].values())
     videos_processed = 0
     last_percentage = -1  # Track last printed percentage to avoid duplicates
 
