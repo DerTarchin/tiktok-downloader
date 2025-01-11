@@ -414,7 +414,7 @@ def print_final_summary(input_path, file_handler):
     summary_text += "FINAL SUMMARY\n"
     summary_text += "="*50 + "\n"
     summary_text += f"Total videos downloaded: {success_count:,}\n"
-    summary_text += f"Total private videos: {total_private:,}\n"
+    summary_text += f"Total private videos: {total_private:,} (i can't downlaod these, sorry)\n"
     summary_text += f"Total failed: {total_failed:,}\n"
     summary_text += f"Total size: {total_size}\n"
     summary_text += "="*50 + "\n"
@@ -433,4 +433,8 @@ def print_final_summary(input_path, file_handler):
     print("Here's the temporary link to them in google drive:")
     print("\n --- LINK HERE --- \n")
     print("You can download them from there and save them to your computer. Please do so as soon as you can, and let me know when you're done, because i'd like to have that space available again to help other TikTokers")
+    if total_size > 3:
+        print("And i suggest you download folder-by-folder instead of downloading the entire archive at once, because it's easier to manage smaller downloads at a time")
+        print("Here's where you can find the download buttons:")
+        print("https://imgur.com/a/wRT1Zaw")
     
