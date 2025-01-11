@@ -409,6 +409,12 @@ def print_final_summary(input_path, file_handler):
     except Exception as e:
         total_size = f"Unable to determine: {str(e)}"
     
+    # Convert total_size to a float for comparison
+    try:
+        size_value = float(total_size.replace("GB", "").strip())
+    except ValueError:
+        size_value = 0  # Default to 0 if conversion fails
+
     # Create summary text
     summary_text = "\n" + "="*50 + "\n"
     summary_text += "FINAL SUMMARY\n"
@@ -429,11 +435,12 @@ def print_final_summary(input_path, file_handler):
         f.write(summary_text)
     
     print("\n --- message template --- \n")
-    print("Great news! Your videos are ready :)")
+    print("Great news! Your videos are ready 😊🎉")
+    # ADD SUMMARY HERE
     print("Here's the temporary link to them in google drive:")
     print("\n --- LINK HERE --- \n")
     print("You can download them from there and save them to your computer. Please do so as soon as you can, and let me know when you're done, because i'd like to have that space available again to help other TikTokers")
-    if total_size > 3:
+    if size_value > 3:
         print("And i suggest you download folder-by-folder instead of downloading the entire archive at once, because it's easier to manage smaller downloads at a time")
         print("Here's where you can find the download buttons:")
         print("https://imgur.com/a/wRT1Zaw")

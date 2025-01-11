@@ -224,11 +224,16 @@ def main():
     
     # Add validation step unless skipped
     if not skip_validation:
-        validator.validate_downloads(input_path if os.path.isdir(input_path) 
+        validation_results = validator.validate_downloads(input_path if os.path.isdir(input_path) 
                                   else os.path.dirname(input_path))
         
-    # Print final summary after processing is complete
-    print_final_summary(input_path, file_handler)
+        # Only print final summary if there are no issues
+        if not validation_results['missing'] and not validation_results['extra']:
+            print_final_summary(input_path, file_handler)
+        else:
+            print("Validation results:")
+            print(f"Missing: {validation_results['missing']}")
+            print(f"Extra: {validation_results['extra']}")
 
 if __name__ == "__main__":
     main() 
