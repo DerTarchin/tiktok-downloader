@@ -143,6 +143,39 @@ The original script (`dl_vids.py`) is kept as a backup and provides the same fun
 
 ## Utility Scripts
 
+### fetch_collection_videos.py
+
+A utility script to fetch video URLs from a single TikTok collection using their web API.
+
+```bash
+# Fetch videos from a collection
+python scripts/fetch_collection_videos.py COLLECTION_ID
+```
+
+The script will:
+
+- Connect to TikTok's web API
+- Fetch all video IDs from the specified collection
+- Display the total number of videos found
+
+### fetch_user_collections.py
+
+A utility script to fetch all collections from a TikTok user and download their video URLs.
+
+```bash
+# Fetch all collections for a user
+python scripts/fetch_user_collections.py USERNAME OUTPUT_DIR
+```
+
+The script will:
+
+- Fetch all collections for the specified user
+- For each collection:
+  - Fetch all video URLs
+  - Save them to a text file named after the collection
+- Create a separate file for each collection in the output directory
+- Display a summary of total collections and videos found
+
 ### dedupe_links.py
 
 A utility script to remove duplicate URLs from text files in a directory.
