@@ -18,19 +18,27 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         sync_handler: SyncHandler instance
         skip_private: Whether to skip known private videos
     """
-    # Get the collection name (text file name without extension)
+    print(f"\nProcessing file {index:,} of {total_files:,}: {os.path.basename(file_path)}")
+    
+    # Get collection name from file name
     collection_name = os.path.splitext(os.path.basename(file_path))[0]
-
-    # Create an output folder in the same directory as the input file
-    output_folder = os.path.join(os.path.dirname(file_path), collection_name)
-    os.makedirs(output_folder, exist_ok=True)
-
-    # Path for the error file
+    # Don't use collection name for uncategorized files
+    if collection_name.startswith(file_handler.all_saves_name):
+        collection_name = None
+    
+    # Create output folder based on collection name
+    output_folder = os.path.join(os.path.dirname(file_path), 
+                               os.path.splitext(os.path.basename(file_path))[0])
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"Created output folder: {os.path.basename(output_folder)}")
+    
+    # Get error log path
     error_file_path = file_handler.get_error_log_path(file_path)
-
-    # Read URLs from the file and create sets for faster lookups
-    with open(file_path, "r") as file:
-        urls = {url.strip() for url in file if url.strip()}
+    
+    # Read URLs from file
+    with open(file_path, "r") as f:
+        urls = {url.strip() for url in f if url.strip()}
 
     if os.path.basename(file_path) != file_handler.all_saves_name:
         print(f"\nProcessing {index} of {total_files} collections ({collection_name})")
@@ -45,7 +53,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                     known_private_urls.add(line[:-10])  # Remove " (private)" suffix
     
     # Create sets for faster membership testing and filter out private URLs if skip_private is True
-    downloaded_urls = {url for url in urls if file_handler.is_url_downloaded(url)}
+    downloaded_urls = {url for url in urls if file_handler.is_url_downloaded(url, collection_name)}
     remaining_urls = urls - downloaded_urls
     if skip_private:
         remaining_urls = remaining_urls - known_private_urls
@@ -94,7 +102,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                     elif error_msg == "rate_limited":
                         print(f"\t  ⚠️ Rate limited by TikTok, using Selenium: {url}")
                         try:
-                            selenium_handler.download_with_selenium(url, output_folder, file_handler)
+                            selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
                         except Exception as e:
                             if str(e) == "private":
                                 print(f"\t  ❌ Private video: {url}")
@@ -105,7 +113,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                     elif error_msg == "network":
                         print(f"\t  ⚠️ Network error, using Selenium: {url}")
                         try:
-                            selenium_handler.download_with_selenium(url, output_folder, file_handler)
+                            selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
                         except Exception as e:
                             if str(e) == "private":
                                 print(f"\t  ❌ Private video: {url}")
@@ -116,7 +124,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                     elif error_msg == "audio_only":
                         print(f"\t  ⚠️ Audio-only, using Selenium: {url}")
                         try:
-                            selenium_handler.download_with_selenium(url, output_folder, file_handler)
+                            selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
                         except Exception as e:
                             if str(e) == "private":
                                 print(f"\t  ❌ Private video: {url}")
@@ -127,7 +135,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                     elif not success:
                         print(f"\t  ⚠️  yt-dlp failed ({error_msg}), using Selenium: {url}")
                         try:
-                            selenium_handler.download_with_selenium(url, output_folder, file_handler)
+                            selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
                         except Exception as e:
                             if str(e) == "private":
                                 print(f"\t  ❌ Private video: {url}")
@@ -136,7 +144,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                                 print(f"\t  ❌ Selenium failed: {str(e)}")
                                 file_handler.log_error(url, error_file_path)
                     else:
-                        file_handler.log_successful_download(url)
+                        file_handler.log_successful_download(url, collection_name)
             except Exception as e:
                 print(f"\t  ❌ Batch processing failed: {str(e)}")
                 # Log errors for all URLs in the batch that haven't been handled
@@ -150,8 +158,8 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         for idx, url in enumerate(photo_urls, 1):
             print(f"\tPhoto {idx} of {len(photo_urls)}: {url}")
             try:
-                selenium_handler.download_with_selenium(url, output_folder, file_handler)
-                file_handler.log_successful_download(url)
+                selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
+                file_handler.log_successful_download(url, collection_name)
             except Exception as e:
                 if str(e) == "private":
                     print(f"\t  ❌ Private photo: {url}")

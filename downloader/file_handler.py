@@ -55,10 +55,13 @@ class FileHandler:
                     raise
                 time.sleep(retry_delay)
 
-    def log_successful_download(self, url):
+    def log_successful_download(self, url, collection_name=None):
         """Log successfully downloaded URL to the success log file with file locking"""
         max_retries = 3
         retry_delay = 0.1
+        
+        # Prefix URL with collection name if provided
+        log_entry = f"{collection_name}:::{url}\n" if collection_name else f"{url}\n"
         
         for attempt in range(max_retries):
             try:
@@ -66,7 +69,7 @@ class FileHandler:
                     # Get an exclusive lock on the file
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                     try:
-                        f.write(f"{url}\n")
+                        f.write(log_entry)
                         f.flush()  # Ensure write is committed to disk
                     finally:
                         # Always release the lock
@@ -77,12 +80,13 @@ class FileHandler:
                     raise  # Re-raise the exception if all retries failed
                 time.sleep(retry_delay)  # Wait before retrying
 
-    def is_url_downloaded(self, url):
+    def is_url_downloaded(self, url, collection_name=None):
         """
         Check if video ID has been successfully downloaded before.
         
         Args:
             url: URL to check
+            collection_name: Optional collection name to check against
             
         Returns:
             bool: True if URL has been downloaded, False otherwise
@@ -95,9 +99,19 @@ class FileHandler:
             return False
             
         with open(self.success_log_path, 'r') as f:
-            logged_urls = {line.strip() for line in f}
-            # Check if any logged URL has matching video ID
-            return any(current_video_id == extract_video_id(logged_url) for logged_url in logged_urls)
+            logged_entries = {line.strip() for line in f}
+            
+            # For uncategorized links, match against any instance
+            if not collection_name:
+                # Extract video IDs from all entries, removing collection prefix if present
+                logged_urls = {entry.split(':::', 1)[-1] for entry in logged_entries}
+                return any(current_video_id == extract_video_id(logged_url) for logged_url in logged_urls)
+            
+            # For collection-specific links, only match against that collection
+            collection_prefix = f"{collection_name}:::"
+            collection_entries = {entry.split(':::', 1)[-1] for entry in logged_entries 
+                               if entry.startswith(collection_prefix)}
+            return any(current_video_id == extract_video_id(logged_url) for logged_url in collection_entries)
 
     def count_unique_videos(self):
         """Count unique videos in input path"""

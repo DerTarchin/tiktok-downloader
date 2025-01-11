@@ -126,7 +126,7 @@ class SeleniumHandler:
 
         return f"{uploader} - " if uploader else ""
 
-    def download_with_selenium(self, url, output_folder, file_handler):
+    def download_with_selenium(self, url, output_folder, file_handler, collection_name=None):
         """
         Download video/photo using Selenium automation of musicaldown.com.
         
@@ -134,12 +134,13 @@ class SeleniumHandler:
             url: URL to download
             output_folder: Folder to save downloaded file to
             file_handler: FileHandler instance for logging
+            collection_name: Optional collection name for tracking downloads
         
         Raises:
             Exception: If download fails at any step
         """
         # Skip if URL was already successfully downloaded
-        if file_handler.is_url_downloaded(url):
+        if file_handler.is_url_downloaded(url, collection_name):
             print(f"\t-> Already downloaded: {url}")
             return
         
@@ -198,7 +199,7 @@ class SeleniumHandler:
             raise
 
         # After successful download
-        file_handler.log_successful_download(url)
+        file_handler.log_successful_download(url, collection_name)
 
     def _handle_photo_download(self, url, output_folder, video_id_suffix):
         """Handle photo download process"""

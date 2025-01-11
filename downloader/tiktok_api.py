@@ -173,7 +173,7 @@ def get_collection_params(collection_id: str, cursor: str = "0") -> Dict:
 
 def format_video_url(video_id: str) -> str:
     """Format a video ID into a TikTok URL."""
-    return f'https://www.tiktok.com/t/{video_id}'
+    return f'https://www.tiktok.com/@/video/{video_id}'
 
 def fetch_collection_items(collection_id: str, session: Optional[requests.Session] = None) -> List[str]:
     """
@@ -193,12 +193,15 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
     has_more = True
     video_ids = []
     page = 1
+
+    print(f"Fetching collection {collection_id}...")
+    return video_ids
     
     while has_more:
         params = get_collection_params(collection_id, cursor)
         
         try:
-            print(f"Page {page}...")
+            print(f"Fetching page {page} with cursor {cursor}...")
             response = session.get(
                 ENDPOINTS['collection_items'],
                 params=params,
@@ -210,20 +213,23 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
             # Extract items from response
             items = data.get("itemList", [])
             if not items:
+                import json
                 print("No more items found")
+                print("Full response:")
+                print(json.dumps(data, indent=2))
                 break
-            
             # Process items
             for item in items:
                 video_id = item.get("video", {}).get("id")
                 if video_id:
                     video_ids.append(video_id)
             
-            print(f"{len(items)} ids found")
+            print(f"Page {page}: {len(items)} ids found, total collected: {len(video_ids)}")
             
             # Check if there are more items
             has_more = data.get("hasMore", False)
             cursor = str(data.get("cursor", "0"))
+            print(f"hasMore: {has_more}, next cursor: {cursor}")
             page += 1
             
             # Add a small delay to avoid rate limiting
@@ -231,7 +237,7 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
             time.sleep(1)
             
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching data: {e}")
+            print(f"Error fetching data on page {page}: {e}")
             if hasattr(e, 'response'):
                 print(f"Response text: {e.response.text}")
             break

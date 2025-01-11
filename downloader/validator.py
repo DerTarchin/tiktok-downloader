@@ -61,6 +61,13 @@ class Validator:
         
         text_files.sort(key=sort_key)
         
+        # Read success log once at the start
+        success_log_path = os.path.join(input_path, "success.log")
+        success_log_entries = set()
+        if os.path.exists(success_log_path):
+            with open(success_log_path, 'r') as f:
+                success_log_entries = {line.strip() for line in f}
+        
         for txt_file in text_files:
             collection_name = os.path.splitext(txt_file)[0]
             collection_folder = os.path.join(input_path, collection_name)
@@ -143,6 +150,23 @@ class Validator:
                 with open(error_log_path, 'r') as f:
                     error_ids = {extract_video_id(url.strip().replace(' (private)', '')) 
                                for url in f if url.strip()}
+            
+            # Check success log for this collection
+            # First try collection-prefixed entries
+            collection_prefix = f"{collection_name}:::"
+            collection_success_entries = {entry.split(':::', 1)[-1] for entry in success_log_entries 
+                                       if entry.startswith(collection_prefix)}
+            
+            # If no prefixed entries found, fall back to non-prefixed entries
+            if not collection_success_entries:
+                # Check for entries that don't have a collection prefix
+                # We split on pipe and check if the first part is a known collection name
+                collection_success_entries = {entry for entry in success_log_entries 
+                                           if not any(entry.startswith(f"{f.split('.')[0]}:::") 
+                                                    for f in text_files)}
+            
+            success_ids = {extract_video_id(url) for url in collection_success_entries}
+            downloaded_ids.update(success_ids)
             
             # Find missing and extra IDs
             missing_ids = expected_ids - (downloaded_ids | error_ids)
