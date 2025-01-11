@@ -413,7 +413,7 @@ def print_final_summary(input_path, file_handler):
     summary_text = "\n" + "="*50 + "\n"
     summary_text += "FINAL SUMMARY\n"
     summary_text += "="*50 + "\n"
-    summary_text += f"Total unique videos downloaded: {success_count:,}\n"
+    summary_text += f"Total videos downloaded: {success_count:,}\n"
     summary_text += f"Total private videos: {total_private:,}\n"
     summary_text += f"Total failed: {total_failed:,}\n"
     summary_text += f"Total size: {total_size}\n"
