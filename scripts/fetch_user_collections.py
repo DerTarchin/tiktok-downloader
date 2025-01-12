@@ -14,13 +14,15 @@ from downloader.tiktok_api import fetch_collections, format_video_url, fetch_col
 def main():
     """Main function to run the script."""
     parser = argparse.ArgumentParser(description='Fetch all collections for a TikTok user')
-    parser.add_argument('username', help='TikTok username to fetch collections from')
     parser.add_argument('output_dir', help='Directory to save the collection files into')
     args = parser.parse_args()
     
+    # Extract username from the final directory of the output path
+    username = os.path.basename(os.path.normpath(args.output_dir))
+    
     try:
-        print(f"\nFetching collections for user @{args.username}...")
-        collections = fetch_collections(args.username)
+        print(f"\nFetching collections for user @{username}...")
+        collections = fetch_collections(username)
         
         if not collections:
             print("No collections found for this user")
@@ -40,14 +42,12 @@ def main():
             # Use fetch_collection_items from tiktok_api
             video_ids = fetch_collection_items(collection_id)
             
+            output_file = os.path.join(args.output_dir, f"{safe_name}.txt")
             if video_ids:
-                output_file = os.path.join(args.output_dir, f"{safe_name}.txt")
                 with open(output_file, 'w') as f:
                     for vid_id in video_ids:
                         f.write(format_video_url(vid_id) + '\n')
-                print(f"Saved {len(video_ids):,} video URLs to {output_file}")
-            else:
-                print("No videos found in this collection")
+            print(f"Saved {len(video_ids):,} video URLs to {output_file}")
                 
         # Print summary
         total_videos = sum(len(fetch_collection_items(c['id'])) for c in collections)

@@ -256,7 +256,8 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                         # Now log the error as private
                         file_handler.log_error(url, error_file_path, is_private=True)
                         continue
-                    raise
+                    elif not success:
+                        raise Exception(error_msg or "Download failed")
             
             except Exception as e:
                 print(f"\t-> Retry failed: {e}")

@@ -240,6 +240,10 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
     print(f"\nTotal videos found: {len(video_ids):,}")
     return video_ids
 
+def sanitize_filename(name: str) -> str:
+    """Sanitize a string to be used as a filename."""
+    return re.sub(r'[<>:"/\\|?*]', '_', name)
+
 def fetch_collections(username: str) -> List[Dict]:
     """Fetch all collections for a user."""
     # Create a session to maintain cookies
@@ -271,9 +275,11 @@ def fetch_collections(username: str) -> List[Dict]:
                 break
                 
             for item in items:
+                collection_name = item.get('name')
+                safe_name = sanitize_filename(collection_name)
                 collection = {
                     'id': item.get('collectionId'),
-                    'name': item.get('name'),
+                    'name': safe_name,  # Use sanitized name
                     'total': item.get('total')
                 }
                 collections.append(collection)

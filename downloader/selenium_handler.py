@@ -17,7 +17,8 @@ from .utils import clean_filename, extract_video_id, get_filename_suffix
 
 class SeleniumHandler:
     def __init__(self, temp_download_dir, headless=True):
-        self.temp_download_dir = temp_download_dir
+        # Convert temp_download_dir to absolute path if it's not already
+        self.temp_download_dir = os.path.abspath(temp_download_dir)
         self.driver = None
         self.headless = headless
         
@@ -45,10 +46,24 @@ class SeleniumHandler:
         options.set_preference("browser.download.folderList", 2)
         options.set_preference("browser.download.manager.showWhenStarting", False)
         options.set_preference("browser.download.dir", self.temp_download_dir)
+        options.set_preference("browser.download.useDownloadDir", True)
+        options.set_preference("browser.download.always_ask_before_handling_new_types", False)
+        options.set_preference("browser.download.manager.closeWhenDone", True)
+        options.set_preference("browser.download.manager.focusWhenStarting", False)
+        options.set_preference("browser.download.manager.showAlertOnComplete", False)
+        options.set_preference("browser.download.manager.useWindow", False)
+        options.set_preference("browser.download.panel.shown", True)
+        options.set_preference("browser.download.saveLinkAsFilenameTimeout", 0)
+        options.set_preference("browser.download.forbid_open_with", True)
+        options.set_preference("pdfjs.disabled", True)  # Disable built-in PDF viewer
+        options.set_preference("browser.helperApps.alwaysAsk.force", False)
         options.set_preference("browser.helperApps.neverAsk.saveToDisk", 
-            "image/jpeg,image/png,image/jpg,video/mp4,video/webm,video/x-matroska,"
+            "image/jpeg,image/png,image/jpg,image/webp,video/mp4,video/webm,video/x-matroska,"
             "video/quicktime,video/x-msvideo,video/x-flv,application/x-mpegURL,"
-            "video/MP2T,video/3gpp,video/mpeg")
+            "video/MP2T,video/3gpp,video/mpeg,application/zip,application/x-zip,"
+            "application/x-zip-compressed,application/octet-stream,"
+            "application/binary,application/x-unknown,application/force-download,"
+            "application/download,binary/octet-stream")
 
         # Install uBlock Origin
         options.set_preference("extensions.autoDisableScopes", 0)
@@ -183,7 +198,7 @@ class SeleniumHandler:
                 print(f"\t-> Failed at: Finding and clicking submit button")
                 print(f"\t-> Looking for element: CSS 'button[type='submit']'")
                 raise Exception(f"Failed to find or click submit button: {str(e)}")
-
+            
             if "/photo/" in self.driver.current_url:
                 self._handle_photo_download(url, output_folder, video_id_suffix)
             elif "/video/" in url:
@@ -207,47 +222,72 @@ class SeleniumHandler:
             convert_button = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-event="video_convert_click"]'))
             )
-            convert_button.click()
             
-            # Wait for new file to appear in temp downloads directory
-            max_wait = 60
-            start_time = time.time()
-            while time.time() - start_time < max_wait:
-                downloaded_files = os.listdir(self.temp_download_dir)
-                if downloaded_files:
-                    # Filter out partial downloads
-                    complete_files = [f for f in downloaded_files if not f.endswith('.part')]
-                    if complete_files:
-                        # Get the most recently modified file
-                        latest_file = max(
-                            complete_files,
-                            key=lambda f: os.path.getmtime(os.path.join(self.temp_download_dir, f))
-                        )
-                        downloaded_file = os.path.join(self.temp_download_dir, latest_file)
-                        self._process_downloaded_photo_file(downloaded_file, url, output_folder, video_id_suffix)
-                        return
-                time.sleep(0.5)
+            # Get the download URL before clicking
+            download_url = convert_button.get_attribute("data-url")
+            if not download_url:
+                # If URL not in data-url, click and wait for the actual download button
+                convert_button.click()
+                
+                # Wait for and find the download link
+                download_link = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'a[data-event="photo_download_click"]'))
+                )
+                download_url = download_link.get_attribute("href")
+                
+            if not download_url:
+                raise Exception("Could not find download URL for photo")
             
-            raise Exception("Timeout waiting for photo download")
+            # Get filename components
+            uploader = self.get_uploader_from_page(url)
+            description = self._get_video_description()
+            
+            if description:
+                filename = clean_filename(f"{(uploader + description)[:150]}{video_id_suffix}.jpg")
+            else:
+                filename = clean_filename(f"{uploader[:150]}{video_id_suffix}.jpg")
+            
+            download_path = os.path.join(output_folder, filename)
+            
+            # Download using curl
+            cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                if "[Errno 92] Illegal byte sequence" in result.stderr:
+                    simple_filename = f"{video_id_suffix.strip()}.jpg"
+                    if simple_filename.startswith('.'):
+                        simple_filename = simple_filename[1:]
+                    simple_download_path = os.path.join(output_folder, simple_filename)
+                    result = subprocess.run(["curl", "-L", "-s", download_url, "-o", simple_download_path],
+                                         capture_output=True, text=True)
+                    if result.returncode != 0:
+                        raise Exception(f"Curl download failed with error: {result.stderr}")
+                else:
+                    raise Exception(f"Curl download failed with error: {result.stderr}")
+                    
         except Exception as e:
             print(f"\t-> Failed at: Photo download process")
-            print(f"\t-> Looking for element: CSS 'button[data-event=\"video_convert_click\"]'")
-            raise Exception(f"Failed during photo download process: {str(e)}")
+            print(f"\t-> Error details: {str(e)}")
+            raise
 
     def _handle_video_download(self, url, output_folder, video_id_suffix):
         """Handle video download process"""
         try:
             # Create a condition to check for either the download button or private video message
             private_video = False
-            
+
             def check_elements():
                 try:
                     # Check for private video message
-                    toast = self.driver.find_element(By.CSS_SELECTOR, 'div.toast')
-                    if "Video is private or removed!" in toast.text:
-                        nonlocal private_video
+                    try:
+                        toast = self.driver.find_element(By.CSS_SELECTOR, 'div.toast')
+                        if "Video is private or removed!" in toast.text:
+                            nonlocal private_video
                         private_video = True
                         return True
+                    except:
+                        pass
                     
                     # Check for download button
                     download_button = self.driver.find_element(By.CSS_SELECTOR, 'a[data-event="hd_download_click"]')
@@ -280,8 +320,8 @@ class SeleniumHandler:
             download_path = os.path.join(output_folder, filename)
             
             # Download using curl
-            result = subprocess.run(["curl", "-L", "-s", download_url, "-o", download_path], 
-                                 capture_output=True, text=True)
+            cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
+            result = subprocess.run(cmd, capture_output=True, text=True)
             
             if result.returncode != 0:
                 if "[Errno 92] Illegal byte sequence" in result.stderr:
@@ -297,11 +337,14 @@ class SeleniumHandler:
                     raise Exception(f"Curl download failed with error: {result.stderr}")
                     
         except Exception as e:
+            print(e)
+            print(str(e))
             if str(e) == "private":
                 raise Exception("private")
             elif "href attribute is empty" not in str(e):
                 print(f"\t-> Failed at: Video download process")
                 print(f"\t-> Looking for element: CSS 'a[data-event=\"hd_download_click\"]'")
+            input("Press Enter to continue...")
             raise
 
     def _get_video_description(self):

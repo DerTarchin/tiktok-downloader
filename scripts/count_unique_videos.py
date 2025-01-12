@@ -13,6 +13,8 @@ from downloader.utils import extract_video_id
 def count_unique_videos(directory: str) -> Set[str]:
     """Count unique video IDs across all non-log text files."""
     unique_ids = set()
+
+    print(f"Counting unique videos in {directory}...\n")
     
     # Get all .txt files that aren't error logs
     txt_files = [f for f in os.listdir(directory) 
@@ -34,7 +36,7 @@ def count_unique_videos(directory: str) -> Set[str]:
                         if video_id:
                             file_ids.add(video_id)
                             unique_ids.add(video_id)
-            print(f"{filename.replace('.txt', '')}: {len(file_ids):,} unique videos")
+            print(f"{filename.replace('.txt', '')}: {len(file_ids):,}")
         except Exception as e:
             print(f"Error reading {filename}: {e}", file=sys.stderr)
             continue

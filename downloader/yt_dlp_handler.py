@@ -87,7 +87,7 @@ class YtDlpHandler:
                                 os.remove(filename)
                             except OSError:
                                 pass
-                            return False, "not_video"
+                            return False, "not video file"
                 return True, None
             
             if "HTTP Error 429" in stderr:
