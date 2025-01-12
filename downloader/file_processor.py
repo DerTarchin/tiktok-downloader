@@ -99,7 +99,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                     if error_msg == "private":
                         print(f"\t  ❌ Private video: {url}")
                         file_handler.log_error(url, error_file_path, is_private=True)
-                    elif error_msg in selenium_handler.all_error_types:
+                    elif error_msg in yt_dlp_handler.all_error_types:
                         print(f"\t  ⚠️ {error_msg}, using Selenium: {url}")
                         try:
                             selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
@@ -234,7 +234,7 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                         # Now log the error as private
                         file_handler.log_error(url, error_file_path, is_private=True)
                         continue
-                    elif error_msg in selenium_handler.all_error_types or not success:
+                    elif error_msg in yt_dlp_handler.all_error_types or not success:
                         print(f"\t  ⚠️ {error_msg.capitalize()} error, using Selenium: {url}")
                         try:
                             selenium_handler.download_with_selenium(url, output_folder, file_handler)
