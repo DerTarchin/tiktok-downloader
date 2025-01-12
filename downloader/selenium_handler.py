@@ -222,50 +222,28 @@ class SeleniumHandler:
             convert_button = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-event="video_convert_click"]'))
             )
-            
-            # Get the download URL before clicking
-            download_url = convert_button.get_attribute("data-url")
-            if not download_url:
-                # If URL not in data-url, click and wait for the actual download button
-                convert_button.click()
+            convert_button.click()
+
+            # Wait for new file to appear in temp downloads directory
+            max_wait = 60
+            start_time = time.time()
+            while time.time() - start_time < max_wait:
+                downloaded_files = os.listdir(self.temp_download_dir)
+                if downloaded_files:
+                    # Filter out partial downloads
+                    complete_files = [f for f in downloaded_files if not f.endswith('.part')]
+                    if complete_files:
+                        # Get the most recently modified file
+                        latest_file = max(
+                            complete_files,
+                            key=lambda f: os.path.getmtime(os.path.join(self.temp_download_dir, f))
+                        )
+                        downloaded_file = os.path.join(self.temp_download_dir, latest_file)
+                        self._process_downloaded_photo_file(downloaded_file, url, output_folder, video_id_suffix)
+                        return
+                time.sleep(0.5)
                 
-                # Wait for and find the download link
-                download_link = WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'a[data-event="photo_download_click"]'))
-                )
-                download_url = download_link.get_attribute("href")
-                
-            if not download_url:
-                raise Exception("Could not find download URL for photo")
-            
-            # Get filename components
-            uploader = self.get_uploader_from_page(url)
-            description = self._get_video_description()
-            
-            if description:
-                filename = clean_filename(f"{(uploader + description)[:150]}{video_id_suffix}.jpg")
-            else:
-                filename = clean_filename(f"{uploader[:150]}{video_id_suffix}.jpg")
-            
-            download_path = os.path.join(output_folder, filename)
-            
-            # Download using curl
-            cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                if "[Errno 92] Illegal byte sequence" in result.stderr:
-                    simple_filename = f"{video_id_suffix.strip()}.jpg"
-                    if simple_filename.startswith('.'):
-                        simple_filename = simple_filename[1:]
-                    simple_download_path = os.path.join(output_folder, simple_filename)
-                    result = subprocess.run(["curl", "-L", "-s", download_url, "-o", simple_download_path],
-                                         capture_output=True, text=True)
-                    if result.returncode != 0:
-                        raise Exception(f"Curl download failed with error: {result.stderr}")
-                else:
-                    raise Exception(f"Curl download failed with error: {result.stderr}")
-                    
+            raise Exception("Timeout waiting for photo download")        
         except Exception as e:
             print(f"\t-> Failed at: Photo download process")
             print(f"\t-> Error details: {str(e)}")
