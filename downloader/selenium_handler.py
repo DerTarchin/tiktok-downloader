@@ -225,7 +225,7 @@ class SeleniumHandler:
             convert_button.click()
 
             # Wait for new file to appear in temp downloads directory
-            max_wait = 60
+            max_wait = 90
             start_time = time.time()
             while time.time() - start_time < max_wait:
                 downloaded_files = os.listdir(self.temp_download_dir)
