@@ -117,14 +117,17 @@ python main.py path/to/directory --skip-private
 # Keep all uncategorized videos in one file (overrides default group splitting)
 python main.py path/to/directory --combine-uncategorized
 
+# Use proxy servers for yt-dlp downloads (helps avoid rate limiting)
+python main.py path/to/directory --proxies socks5://proxy1:1080 http://proxy2:8080
+
 # Combine multiple flags
-python main.py path/to/directory --disable-headless --concurrent 4 --skip-validation
+python main.py path/to/directory --disable-headless --concurrent 4 --skip-validation --proxies socks5://proxy1:1080
 ```
 
 The script will:
 
 1. Create a folder with the same name as the input file
-2. Try to download each video/photo using yt-dlp first
+2. Try to download each video/photo using yt-dlp first (with proxy rotation if specified)
 3. If yt-dlp fails, try using Selenium with musicaldown.com
 4. Save successful downloads to the created folder
 5. Create error logs for failed downloads
@@ -141,6 +144,7 @@ The script will:
 - Modular code structure for better maintainability
 - Automatic Google Drive synchronization
 - Download validation and reporting
+- Proxy support for avoiding rate limits
 
 ## Uploading videos to Google Drive
 

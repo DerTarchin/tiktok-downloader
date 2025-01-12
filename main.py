@@ -2,44 +2,64 @@
 
 import os
 import sys
+import argparse
 from downloader.file_handler import FileHandler
 from downloader.selenium_handler import SeleniumHandler
 from downloader.yt_dlp_handler import YtDlpHandler
 from downloader.sync_handler import SyncHandler
 from downloader.validator import Validator
+from downloader.vpn_handler import VPNHandler
 from downloader.utils import (get_highest_group_number, write_and_process_urls, 
                             split_into_groups, print_final_summary)
 from downloader.file_processor import process_file, process_error_logs
 import subprocess
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Download TikTok videos and photos.")
+    parser.add_argument("input_path", help="Path to input file or directory")
+    parser.add_argument("--errors-only", action="store_true", 
+                      help="Only retry failed downloads")
+    parser.add_argument("--disable-headless", action="store_true", 
+                      help="Disable headless mode for Selenium")
+    parser.add_argument("--concurrent", type=int, default=3, choices=range(1, 6),
+                      help="Number of concurrent downloads (1-5)")
+    parser.add_argument("--skip-validation", action="store_true",
+                      help="Skip download validation step")
+    parser.add_argument("--skip-private", action="store_true",
+                      help="Skip known private videos")
+    parser.add_argument("--combine-uncategorized", action="store_true",
+                      help="Keep all uncategorized videos in one file")
+    parser.add_argument("--use-nordvpn", action="store_true",
+                      help="Use NordVPN for automatic VPN rotation")
+    parser.add_argument("--vpn-countries", nargs="+",
+                      help="List of NordVPN country codes to use (e.g. us uk de fr)")
+    return parser.parse_args()
 
 def main():
-    # Check for correct usage
-    if len(sys.argv) < 2:
-        print("Usage: python script.py <input_directory_or_file> [--errors-only] [--disable-headless] [--combine-uncategorized] [--concurrent N] [--skip-validation] [--skip-private]")
-        sys.exit(1)
+    # Parse command line arguments
+    args = parse_args()
+    input_path = args.input_path
+    errors_only = args.errors_only
+    headless = not args.disable_headless
+    concurrent_downloads = args.concurrent
+    skip_validation = args.skip_validation
+    skip_private = args.skip_private
+    combine_uncategorized = args.combine_uncategorized
+    use_nordvpn = args.use_nordvpn
+    vpn_countries = args.vpn_countries
 
-    # Get the input path and check for flags
-    input_path = sys.argv[1]
-    errors_only = "--errors-only" in sys.argv
-    combine_uncategorized = "--combine-uncategorized" in sys.argv
-    headless = "--disable-headless" not in sys.argv
-    skip_validation = "--skip-validation" in sys.argv
-    skip_private = "--skip-private" in sys.argv
+    # Check for correct usage
+    if not os.path.exists(input_path):
+        print(f"Error: Path {input_path} does not exist.")
+        sys.exit(1)
     
-    # Parse concurrent downloads setting
-    concurrent_downloads = 3
-    for i, arg in enumerate(sys.argv):
-        if arg == "--concurrent" and i + 1 < len(sys.argv):
-            try:
-                concurrent_downloads = int(sys.argv[i + 1])
-                if concurrent_downloads < 1:
-                    concurrent_downloads = 1
-                elif concurrent_downloads > 10:
-                    print("Warning: High concurrency may trigger rate limiting. Limiting to 3 concurrent downloads.")
-                    concurrent_downloads = 10
-            except ValueError:
-                print("Warning: Invalid concurrent downloads value. Using default (2).")
+    if not (os.path.isfile(input_path) or os.path.isdir(input_path)):
+        print(f"Error: {input_path} is not a file or directory.")
+        sys.exit(1)
+        
+    if os.path.isfile(input_path) and not input_path.endswith(".txt"):
+        print(f"Error: {input_path} is not a .txt file.")
+        sys.exit(1)
     
     # Initialize handlers
     file_handler = FileHandler(input_path)
@@ -52,8 +72,21 @@ def main():
     temp_download_dir = os.path.join(base_dir, "_tmp")
     os.makedirs(temp_download_dir, exist_ok=True)
     
+    # Initialize VPN if requested
+    vpn_handler = None
+    if use_nordvpn:
+        print("\nInitializing NordVPN...")
+        vpn_handler = VPNHandler(countries=vpn_countries)
+        if vpn_handler.connect():
+            print(">> Connected to NordVPN")
+            print(f">> Status: {vpn_handler.get_status()}")
+        else:
+            print(">> Failed to connect to NordVPN. Please check your NordVPN installation and login status.")
+            sys.exit(1)
+    
     selenium_handler = SeleniumHandler(temp_download_dir, headless=headless)
-    yt_dlp_handler = YtDlpHandler(max_concurrent=concurrent_downloads)
+    yt_dlp_handler = YtDlpHandler(max_concurrent=concurrent_downloads, 
+                                vpn_handler=vpn_handler)
     sync_handler = SyncHandler()
     validator = Validator()
 

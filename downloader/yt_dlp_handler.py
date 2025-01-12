@@ -8,13 +8,19 @@ from threading import Lock
 from .utils import get_filename_suffix
 
 class YtDlpHandler:
-    def __init__(self, max_concurrent=3):
+    def __init__(self, max_concurrent=3, vpn_handler=None):
         self.max_concurrent = max_concurrent
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent)
         self.download_queue = Queue()
         self.result_lock = Lock()
         self.all_error_types = ["private", "rate limited", "network", "audio only", "not video file"]
         
+        # VPN handler
+        self.vpn_handler = vpn_handler
+        self.vpn_enabled = vpn_handler is not None
+        self.rate_limit_count = 0
+        self.rate_limit_threshold = 3  # Number of rate limits before rotating VPN
+
     def try_yt_dlp(self, url, output_folder):
         """
         Attempt to download using yt-dlp.
@@ -55,8 +61,21 @@ class YtDlpHandler:
             elif "Unable to download webpage" in stderr:
                 return False, "network"  # Network connectivity issues
             elif "HTTP Error 429" in stderr:
+                # Handle rate limiting with VPN rotation if enabled
+                if self.vpn_enabled:
+                    with self.result_lock:
+                        self.rate_limit_count += 1
+                        if self.rate_limit_count >= self.rate_limit_threshold:
+                            print("\n>> Rate limit threshold reached. Rotating VPN...")
+                            if self.vpn_handler.rotate():
+                                print(">> VPN rotated successfully")
+                                self.rate_limit_count = 0
+                                # Retry the download with new VPN
+                                return self.try_yt_dlp(url, output_folder)
+                            else:
+                                print(">> VPN rotation failed")
                 return False, "rate limited"  # Rate limiting
-                
+            
             # Check if only audio formats are available
             if stdout and any(["audio only" in stderr.lower(), "no video formats found" in stderr.lower()]):
                 return False, "audio only"
@@ -90,8 +109,21 @@ class YtDlpHandler:
                                 pass
                             return False, "not video file"
                 return True, None
-            
+
             if "HTTP Error 429" in stderr:
+                # Handle rate limiting with VPN rotation if enabled
+                if self.vpn_enabled:
+                    with self.result_lock:
+                        self.rate_limit_count += 1
+                        if self.rate_limit_count >= self.rate_limit_threshold:
+                            print("\n>> Rate limit threshold reached. Rotating VPN...")
+                            if self.vpn_handler.rotate():
+                                print(">> VPN rotated successfully")
+                                self.rate_limit_count = 0
+                                # Retry the download with new VPN
+                                return self.try_yt_dlp(url, output_folder)
+                            else:
+                                print(">> VPN rotation failed")
                 return False, "rate limited"
             elif any(msg in stderr for msg in ["Video not available", "This video is private", "Video unavailable", "Unable to extract video data"]):
                 return False, "private"
@@ -101,6 +133,19 @@ class YtDlpHandler:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str:
+                # Handle rate limiting with VPN rotation if enabled
+                if self.vpn_enabled:
+                    with self.result_lock:
+                        self.rate_limit_count += 1
+                        if self.rate_limit_count >= self.rate_limit_threshold:
+                            print("\n>> Rate limit threshold reached. Rotating VPN...")
+                            if self.vpn_handler.rotate():
+                                print(">> VPN rotated successfully")
+                                self.rate_limit_count = 0
+                                # Retry the download with new VPN
+                                return self.try_yt_dlp(url, output_folder)
+                            else:
+                                print(">> VPN rotation failed")
                 return False, "rate limited"
             elif any(msg in error_str for msg in ["connection", "timeout", "network"]):
                 return False, "network"
@@ -139,4 +184,7 @@ class YtDlpHandler:
         
     def shutdown(self):
         """Cleanup thread pool resources"""
-        self.thread_pool.shutdown(wait=True) 
+        self.thread_pool.shutdown(wait=True)
+        # Disconnect VPN if enabled
+        if self.vpn_enabled:
+            self.vpn_handler.disconnect() 
