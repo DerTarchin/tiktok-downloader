@@ -322,7 +322,6 @@ class SeleniumHandler:
             elif "href attribute is empty" not in str(e):
                 print(f"\t-> Failed at: Video download process")
                 print(f"\t-> Looking for element: CSS 'a[data-event=\"hd_download_click\"]'")
-            input("Press Enter to continue...")
             raise
 
     def _get_video_description(self):

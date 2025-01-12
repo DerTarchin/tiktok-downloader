@@ -256,8 +256,18 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                         # Now log the error as private
                         file_handler.log_error(url, error_file_path, is_private=True)
                         continue
-                    elif not success:
-                        raise Exception(error_msg or "Download failed")
+                    elif error_msg in ["rate_limited", "network", "audio_only"] or not success:
+                        print(f"\t  ⚠️ {error_msg.capitalize()} error, using Selenium: {url}")
+                        try:
+                            selenium_handler.download_with_selenium(url, output_folder, file_handler)
+                            success = True
+                        except Exception as e:
+                            if str(e) == "private":
+                                print(f"\t  ❌ Private video: {url}")
+                                file_handler.log_error(url, error_file_path, is_private=True)
+                            else:
+                                print(f"\t  ❌ Selenium failed: {str(e)}")
+                                file_handler.log_error(url, error_file_path)
             
             except Exception as e:
                 print(f"\t-> Retry failed: {e}")
