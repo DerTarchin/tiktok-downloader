@@ -315,8 +315,6 @@ class SeleniumHandler:
                     raise Exception(f"Curl download failed with error: {result.stderr}")
                     
         except Exception as e:
-            print(e)
-            print(str(e))
             if str(e) == "private":
                 raise Exception("private")
             elif "href attribute is empty" not in str(e):
