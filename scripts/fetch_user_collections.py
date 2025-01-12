@@ -47,10 +47,9 @@ def main():
             total_videos += len(video_ids)
             
             output_file = os.path.join(args.output_dir, f"{safe_name}.txt")
-            if video_ids:
-                with open(output_file, 'w') as f:
-                    for vid_id in video_ids:
-                        f.write(format_video_url(vid_id) + '\n')
+            with open(output_file, 'w') as f:
+                for vid_id in video_ids:
+                    f.write(format_video_url(vid_id) + '\n')
             print(f"Saved {len(video_ids):,} video URLs to {output_file}")
                 
         # Print summary

@@ -166,15 +166,30 @@ The original script (`dl_vids.py`) is kept as a backup and provides the same fun
 A utility script to fetch video URLs from a single TikTok collection using their web API.
 
 ```bash
-# Fetch videos from a collection
+# Basic usage (creates new file)
 python scripts/fetch_collection_videos.py COLLECTION_ID
+
+# Specify custom output file
+python scripts/fetch_collection_videos.py COLLECTION_ID --output-file my_collection.txt
+
+# Continue from a specific cursor
+python scripts/fetch_collection_videos.py COLLECTION_ID --cursor "123456"
+
+# Add delay between requests (in seconds)
+python scripts/fetch_collection_videos.py COLLECTION_ID --delay 1
+
+# Combine options
+python scripts/fetch_collection_videos.py COLLECTION_ID --output-file my_collection.txt --cursor "123456" --delay 0.5
 ```
 
 The script will:
 
 - Connect to TikTok's web API
-- Fetch all video IDs from the specified collection
-- Display the total number of videos found
+- Read existing URLs from output file if it exists
+- Fetch all video IDs from the specified collection starting from the cursor
+- Only add new unique URLs to avoid duplicates
+- Add optional delay between requests to avoid rate limiting
+- Display progress and statistics
 
 ### fetch_user_collections.py
 
@@ -182,11 +197,12 @@ A utility script to fetch all collections from a TikTok user and download their 
 
 ```bash
 # Fetch all collections for a user
-python scripts/fetch_user_collections.py USERNAME OUTPUT_DIR
+python scripts/fetch_user_collections.py OUTPUT_DIR
 ```
 
 The script will:
 
+- Extract username from the output directory name
 - Fetch all collections for the specified user
 - For each collection:
   - Fetch all video URLs
@@ -210,19 +226,20 @@ The script will:
 
 - Process all .txt files in the specified directory
 - Remove duplicate URLs while preserving order
+- Process collections first, then uncategorized files
 - Report the number of duplicates removed from each file
 - Show a summary of total duplicates removed
 
 ### remove_group_duplicates.py
 
-A utility script to remove duplicate URLs from uncategorized group files if they exist in any regular collection file. This ensures links only exist in one place - either in regular collections or in uncategorized groups.
+A utility script to remove duplicate URLs from uncategorized group files if they exist in any regular collection file.
 
 ```bash
 # Remove duplicates from group files
 python scripts/remove_group_duplicates.py path/to/directory
 
-Example:
-python scripts/remove_group_duplicates.py dertarchin
+# Show what would be done without making changes
+python scripts/remove_group_duplicates.py path/to/directory --dry-run
 ```
 
 The script will:
@@ -235,39 +252,52 @@ The script will:
 
 ### fix_collection_issues.py
 
-A utility script to validate and fix issues with TikTok video collections. It handles:
-
-1. Moving misplaced videos to their correct collections
-2. Removing extra videos that don't belong anywhere
-3. Cleaning up download logs for missing videos
+A utility script to validate and fix issues with TikTok video collections.
 
 ```bash
-# Validate and fix issues in a directory (dry run)
+# Validate and fix issues (dry run)
 python scripts/fix_collection_issues.py path/to/directory --dry-run
 
-# Validate and fix issues in a directory (apply changes)
+# Validate and fix issues (apply changes)
 python scripts/fix_collection_issues.py path/to/directory
 
-# Specify custom Google Drive base path
-python scripts/fix_collection_issues.py path/to/directory --gdrive-base-path "gdrive:/Custom Path"
+# Skip moving videos between collections
+python scripts/fix_collection_issues.py path/to/directory --skip-move
+
+# Use custom Google Drive path
+python scripts/fix_collection_issues.py path/to/directory --gdrive-base-path "gdrive:/My TikToks"
 ```
 
 The script will:
 
-- Check all collection files in the specified directory
-- Verify each video ID is either:
-  - Downloaded as an MP4 file
-  - Listed in an error log
-- Report any missing or extra videos
-- Fix issues by:
-  - Moving videos to their correct collections
-  - Removing extra videos
-  - Updating download logs
-- Validate against both local files and Google Drive
+1. Validate all collections in the directory
+2. Move misplaced videos to their correct collections
+3. Remove extra videos that don't belong anywhere
+4. Clean up download logs for missing videos
+5. Handle both local and remote (Google Drive) files
+
+### parse_urls.py
+
+A utility script to extract and combine URLs from multiple text files.
+
+```bash
+# Process a single file
+python scripts/parse_urls.py input_file.txt
+
+# Process multiple files
+python scripts/parse_urls.py file1.txt file2.txt file3.txt
+```
+
+The script will:
+
+- Read all input files
+- Extract valid TikTok URLs from each file
+- Combine all unique URLs into a single output file (`combined_urls.txt`)
+- Save the output file in the same directory as the first input file
 
 ### rename_hidden_files.py
 
-A utility script to recursively rename files that start with a dot (hidden files) in a directory, except for `.DS_Store` files. This is useful for fixing filenames that were accidentally prefixed with a dot.
+A utility script to rename files that start with a dot (hidden files).
 
 ```bash
 # Process current directory
@@ -275,28 +305,14 @@ python scripts/rename_hidden_files.py
 
 # Process specific directory
 python scripts/rename_hidden_files.py path/to/directory
+
+# Show what would be done without making changes
+python scripts/rename_hidden_files.py path/to/directory --dry-run
 ```
 
 The script will:
 
-- Recursively walk through the specified directory
-- Find files that start with a dot (except .DS_Store)
-- Remove the leading dot from the filename
-- Report each rename operation
-- Show a summary of total files renamed
-
-### count_unique_videos.py
-
-A utility script to count how many unique videos will be downloaded from text files in a directory. It analyzes video IDs across all text files (excluding error logs) to provide an accurate count of unique videos.
-
-```bash
-# Count unique videos in a directory
-python scripts/count_unique_videos.py path/to/directory
-```
-
-The script will:
-
-- Process all non-log text files in the specified directory
-- Extract and analyze video IDs from URLs
-- Count unique videos across all files
-- Display the total number of unique videos to be downloaded
+- Find all files starting with a dot (except .DS_Store)
+- Rename them to remove the leading dot
+- Handle both local and remote (Google Drive) files
+- Show progress and statistics

@@ -175,13 +175,16 @@ def format_video_url(video_id: str) -> str:
     """Format a video ID into a TikTok URL."""
     return f'https://www.tiktok.com/@/video/{video_id}'
 
-def fetch_collection_items(collection_id: str, session: Optional[requests.Session] = None) -> List[str]:
+def fetch_collection_items(collection_id: str, session: Optional[requests.Session] = None, cursor: str = "0", existing_count: int = 0, delay: float = 0) -> List[str]:
     """
     Fetch all video IDs from a TikTok collection using their web API.
     
     Args:
         collection_id: ID of the TikTok collection
         session: Optional requests.Session to use for requests
+        cursor: Optional cursor to start fetching from
+        existing_count: Number of existing items when resuming from a cursor
+        delay: Optional delay between requests in seconds (default: 0)
         
     Returns:
         List of video IDs from the collection
@@ -189,18 +192,22 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
     if session is None:
         session = requests.Session()
     
-    cursor = "0"
     has_more = True
     video_ids = []
-    page = 1
+    # Calculate starting page number based on cursor (assuming increments of 30)
+    page = (int(cursor) // 30) + 1
 
-    print(f"Fetching collection {collection_id}...")
+    print(f"Fetching collection {collection_id} starting from cursor {cursor}...")
     
     while has_more:
         params = get_collection_params(collection_id, cursor)
         
         try:
-            # print(f"Fetching page {page} with cursor {cursor}...")
+            # Add delay if specified
+            if delay > 0 and len(video_ids) > 0:  # Don't delay on first request
+                import time
+                time.sleep(delay)
+            
             response = session.get(
                 ENDPOINTS['collection_items'],
                 params=params,
@@ -220,16 +227,14 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
                 if video_id:
                     video_ids.append(video_id)
             
-            print(f"Page {page}: {len(items):,} found, total collected: {len(video_ids):,} [next cursor: {cursor}]")
+            # Get next cursor before printing progress
+            next_cursor = str(data.get("cursor", "0"))
+            print(f"Page {page}: {len(items):,} found, total collected: {len(video_ids) + existing_count:,} [next cursor: {next_cursor}]")
             
-            # Check if there are more items
+            # Check if there are more items and update cursor
             has_more = data.get("hasMore", False)
-            cursor = str(data.get("cursor", "0"))
+            cursor = next_cursor
             page += 1
-            
-            # Add a small delay to avoid rate limiting
-            # import time
-            # time.sleep(1)
             
         except requests.exceptions.RequestException as e:
             print(f"Error fetching data on page {page}: {e}")
@@ -237,7 +242,7 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
                 print(f"Response text: {e.response.text}")
             break
     
-    print(f"\nTotal videos found: {len(video_ids):,}")
+    print(f"\nTotal videos found: {len(video_ids) + existing_count:,}")
     return video_ids
 
 def sanitize_filename(name: str) -> str:
