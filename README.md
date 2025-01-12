@@ -65,6 +65,24 @@ The main downloader script that downloads TikTok videos and photos using both yt
 - yt-dlp
 - selenium
 - webdriver_manager
+- python-dotenv
+
+### Environment Setup:
+
+1. Copy `.env.template` to `.env`:
+
+   ```bash
+   cp .env.template .env
+   ```
+
+2. Edit `.env` and update the following variables:
+
+   - `TIKTOK_COOKIES`: Your TikTok session cookies
+   - `TIKTOK_DEVICE_ID`: Your device ID
+   - `TIKTOK_ODIN_ID`: Your Odin ID
+   - Other variables can be left as default unless you need to customize them
+
+3. Make sure to keep your `.env` file private and never commit it to version control.
 
 ### How to Use:
 

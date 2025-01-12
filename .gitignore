@@ -1,3 +1,8 @@
+# Project specific
+.env
+.env.*
+!.env.template
+
 tests/
 .DS_Store
 geckodriver.log
