@@ -34,7 +34,7 @@ def count_unique_videos(directory: str) -> Set[str]:
                         if video_id:
                             file_ids.add(video_id)
                             unique_ids.add(video_id)
-            print(f"{filename}: {len(file_ids):,} unique videos")
+            print(f"{filename.replace('.txt', '')}: {len(file_ids):,} unique videos")
         except Exception as e:
             print(f"Error reading {filename}: {e}", file=sys.stderr)
             continue

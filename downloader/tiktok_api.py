@@ -195,13 +195,12 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
     page = 1
 
     print(f"Fetching collection {collection_id}...")
-    return video_ids
     
     while has_more:
         params = get_collection_params(collection_id, cursor)
         
         try:
-            print(f"Fetching page {page} with cursor {cursor}...")
+            # print(f"Fetching page {page} with cursor {cursor}...")
             response = session.get(
                 ENDPOINTS['collection_items'],
                 params=params,
@@ -213,10 +212,7 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
             # Extract items from response
             items = data.get("itemList", [])
             if not items:
-                import json
                 print("No more items found")
-                print("Full response:")
-                print(json.dumps(data, indent=2))
                 break
             # Process items
             for item in items:
@@ -224,17 +220,16 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
                 if video_id:
                     video_ids.append(video_id)
             
-            print(f"Page {page}: {len(items)} ids found, total collected: {len(video_ids)}")
+            print(f"Page {page}: {len(items):,} found, total collected: {len(video_ids):,} [next cursor: {cursor}]")
             
             # Check if there are more items
             has_more = data.get("hasMore", False)
             cursor = str(data.get("cursor", "0"))
-            print(f"hasMore: {has_more}, next cursor: {cursor}")
             page += 1
             
             # Add a small delay to avoid rate limiting
-            import time
-            time.sleep(1)
+            # import time
+            # time.sleep(1)
             
         except requests.exceptions.RequestException as e:
             print(f"Error fetching data on page {page}: {e}")
@@ -242,7 +237,7 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
                 print(f"Response text: {e.response.text}")
             break
     
-    print(f"\nTotal videos found: {len(video_ids)}")
+    print(f"\nTotal videos found: {len(video_ids):,}")
     return video_ids
 
 def fetch_collections(username: str) -> List[Dict]:
