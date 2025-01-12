@@ -40,7 +40,7 @@ def main():
             collection_id = collection['id']
             safe_name = collection_name
             
-            print(f"\nProcessing collection: {collection_name} ({collection_id})")
+            print(f"\nProcessing collection: {collection_name} ({collection_id}) ({collections.index(collection) + 1} of {len(collections)})")
             
             # Use fetch_collection_items from tiktok_api
             video_ids = fetch_collection_items(collection_id)
