@@ -31,6 +31,9 @@ def main():
         # Create output directory if it doesn't exist
         os.makedirs(args.output_dir, exist_ok=True)
         
+        # Track total videos while processing collections
+        total_videos = 0
+        
         # Process each collection
         for collection in collections:
             collection_name = collection['name']
@@ -41,6 +44,7 @@ def main():
             
             # Use fetch_collection_items from tiktok_api
             video_ids = fetch_collection_items(collection_id)
+            total_videos += len(video_ids)
             
             output_file = os.path.join(args.output_dir, f"{safe_name}.txt")
             if video_ids:
@@ -50,7 +54,6 @@ def main():
             print(f"Saved {len(video_ids):,} video URLs to {output_file}")
                 
         # Print summary
-        total_videos = sum(len(fetch_collection_items(c['id'])) for c in collections)
         print(f"\nSummary:")
         print(f"Total collections: {len(collections):,}")
         print(f"Total videos: {total_videos:,}")
