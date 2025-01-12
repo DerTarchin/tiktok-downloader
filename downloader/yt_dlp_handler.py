@@ -13,6 +13,7 @@ class YtDlpHandler:
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent)
         self.download_queue = Queue()
         self.result_lock = Lock()
+        self.all_error_types = ["private", "rate limited", "network", "audio only", "not video file"]
         
     def try_yt_dlp(self, url, output_folder):
         """
@@ -54,11 +55,11 @@ class YtDlpHandler:
             elif "Unable to download webpage" in stderr:
                 return False, "network"  # Network connectivity issues
             elif "HTTP Error 429" in stderr:
-                return False, "rate_limited"  # Rate limiting
+                return False, "rate limited"  # Rate limiting
                 
             # Check if only audio formats are available
             if stdout and any(["audio only" in stderr.lower(), "no video formats found" in stderr.lower()]):
-                return False, "audio_only"
+                return False, "audio only"
             
             # If we have video formats, proceed with download
             download_command = [
@@ -91,7 +92,7 @@ class YtDlpHandler:
                 return True, None
             
             if "HTTP Error 429" in stderr:
-                return False, "rate_limited"
+                return False, "rate limited"
             elif any(msg in stderr for msg in ["Video not available", "This video is private", "Video unavailable", "Unable to extract video data"]):
                 return False, "private"
             
@@ -100,7 +101,7 @@ class YtDlpHandler:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str:
-                return False, "rate_limited"
+                return False, "rate limited"
             elif any(msg in error_str for msg in ["connection", "timeout", "network"]):
                 return False, "network"
             return False, str(e)
