@@ -15,6 +15,8 @@ from urllib.parse import urlparse
 
 from .utils import clean_filename, extract_video_id, get_filename_suffix
 
+MAX_FILENAME_LENGTH = 120
+
 class SeleniumHandler:
     def __init__(self, temp_download_dir, headless=True):
         # Convert temp_download_dir to absolute path if it's not already
@@ -296,9 +298,9 @@ class SeleniumHandler:
             description = self._get_video_description()
             
             if description:
-                filename = clean_filename(f"{(uploader + description)[:150]}{video_id_suffix}.mp4")
+                filename = clean_filename(f"{(uploader + description)[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
             else:
-                filename = clean_filename(f"{uploader[:150]}{video_id_suffix}.mp4")
+                filename = clean_filename(f"{uploader[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
             
             download_path = os.path.join(output_folder, filename)
             
@@ -357,7 +359,7 @@ class SeleniumHandler:
 
         uploader = self.get_uploader_from_page(url)
         suffix = video_id_suffix if title_text else extract_video_id(url)
-        filename = clean_filename(f"{(uploader+title_text)[:150]}{suffix}.mp4")
+        filename = clean_filename(f"{(uploader+title_text)[:MAX_FILENAME_LENGTH]}{suffix}.mp4")
         output_path = os.path.join(output_folder, filename)
         
         # Wait a brief moment to ensure file is completely downloaded

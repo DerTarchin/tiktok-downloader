@@ -228,13 +228,13 @@ def main():
                                   else os.path.dirname(input_path))
         
         # Only print final summary if there are no issues
-        if not validation_results['missing'] and not validation_results['extra'] and not validation_results['empty']:
-            print_final_summary(input_path, file_handler)
-        else:
+        if  validation_results['missing'] or validation_results['extra'] or validation_results['empty']:
             print("Validation results:")
             print(f"Missing: {validation_results['missing']}")
             print(f"Extra: {validation_results['extra']}")
             print(f"Empty (zero-byte): {validation_results['empty']}")
+            
+    print_final_summary(input_path, file_handler)
 
 if __name__ == "__main__":
     main() 

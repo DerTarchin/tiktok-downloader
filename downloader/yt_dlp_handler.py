@@ -7,6 +7,8 @@ from queue import Queue
 from threading import Lock
 from .utils import get_filename_suffix
 
+MAX_FILENAME_LENGTH = 120
+
 class YtDlpHandler:
     def __init__(self, max_concurrent=3):
         self.max_concurrent = max_concurrent
@@ -66,7 +68,7 @@ class YtDlpHandler:
                 "yt-dlp",
                 "--windows-filenames",
                 "--concurrent-fragments", "3",  # Enable concurrent fragment downloads
-                "-o", f"{output_folder}/%(uploader)s - %(title).150B{video_id_suffix}.%(ext)s",
+                "-o", f"{output_folder}/%(uploader)s - %(title).{MAX_FILENAME_LENGTH}B{video_id_suffix}.%(ext)s",
                 url
             ]
             
