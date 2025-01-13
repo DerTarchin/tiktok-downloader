@@ -166,4 +166,23 @@ class SyncHandler:
         if result.returncode != 0:
             print(f">> Error syncing remaining files: {result.stderr}")
         else:
-            print(">> Successfully synced remaining files to Google Drive") 
+            print(">> Successfully synced remaining files to Google Drive")
+        
+        # Sync each folder corresponding to a text file
+        for file in os.listdir(input_path):
+            if file.endswith('.txt'):
+                folder_name = os.path.splitext(file)[0]
+                folder_path = os.path.join(input_path, folder_name)
+                if os.path.isdir(folder_path):
+                    folder_remote_path = f"{remote_path}/{folder_name}"
+                    folder_cmd = [
+                        "rclone", "copy",
+                        folder_path,
+                        folder_remote_path,
+                    ] + self.rclone_modifiers
+                    
+                    folder_result = subprocess.run(folder_cmd, capture_output=True, text=True)
+                    if folder_result.returncode != 0:
+                        print(f">> Error syncing folder {folder_name}: {folder_result.stderr}")
+                    else:
+                        print(f">> Successfully synced folder: {folder_name}") 
