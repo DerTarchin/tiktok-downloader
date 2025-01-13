@@ -96,7 +96,7 @@ class YtDlpHandler:
             elif any(msg in stderr for msg in ["Video not available", "This video is private", "Video unavailable", "Unable to extract video data"]):
                 return False, "private"
             
-            return process.returncode == 0, None
+            return False, stderr
 
         except Exception as e:
             error_str = str(e)

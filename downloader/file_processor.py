@@ -18,8 +18,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         sync_handler: SyncHandler instance
         skip_private: Whether to skip known private videos
     """
-    print(f"\nProcessing file {index:,} of {total_files:,}: {os.path.basename(file_path)}")
-    
+   
     # Get collection name from file name
     collection_name = os.path.splitext(os.path.basename(file_path))[0]
     # Don't use collection name for uncategorized files
