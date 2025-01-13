@@ -260,7 +260,7 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                 with open(error_file_path, 'w') as f:
                     f.writelines(line for line in lines if line.strip() != url)
                 # Log successful download
-                file_handler.log_successful_download(url)
+                file_handler.log_successful_download(url, original_collection_name)
         
         # If we had any successes, add the folder to sync queue
         if had_success:

@@ -226,7 +226,6 @@ class SeleniumHandler:
         except Exception as e:
             if str(e) != "private":
                 print(f"\t-> Failed to download: {url}")
-                print(f"\t-> Current page URL: {self.driver.current_url}")
                 print(f"\t-> Error details: {e}")
             raise
 
@@ -244,7 +243,7 @@ class SeleniumHandler:
             while time.time() - start_time < max_wait:
                 downloaded_files = os.listdir(self.temp_download_dir)
                 if downloaded_files:
-                    # Filter out partial downloads
+                    # Include .part files in the search but prioritize complete files
                     complete_files = [f for f in downloaded_files if not f.endswith('.part')]
                     if complete_files:
                         # Get the most recently modified file
@@ -254,10 +253,9 @@ class SeleniumHandler:
                         )
                         downloaded_file = os.path.join(self.temp_download_dir, latest_file)
                         
-                        # Check if file is empty before processing
-                        if os.path.getsize(downloaded_file) == 0:
-                            raise Exception("File is empty (0 bytes)")
-                            
+                        # Check if file is empty before processing with retries
+                        self._check_file_size_with_retries(downloaded_file)
+                        
                         self._process_downloaded_photo_file(downloaded_file, url, output_folder, video_id_suffix)
                         return
                 time.sleep(0.5)
@@ -265,7 +263,6 @@ class SeleniumHandler:
             raise Exception("Timeout waiting for photo download")        
         except Exception as e:
             print(f"\t-> Failed at: Photo download process")
-            print(f"\t-> Error details: {str(e)}")
             raise
 
     def _handle_video_download(self, url, output_folder, video_id_suffix):
@@ -334,9 +331,8 @@ class SeleniumHandler:
                 else:
                     raise Exception(f"Curl download failed with error: {result.stderr}")
             
-            # Check if downloaded file is empty
-            if os.path.getsize(download_path) == 0:
-                raise Exception("File is empty (0 bytes)")
+            # Check if downloaded file is empty with retries
+            self._check_file_size_with_retries(download_path)
 
         except Exception as e:
             if str(e) == "private":
@@ -379,9 +375,8 @@ class SeleniumHandler:
         try:
             os.rename(downloaded_file, output_path)
             
-            # Check if renamed file is empty
-            if os.path.getsize(output_path) == 0:
-                raise Exception("File is empty (0 bytes)")
+            # Check if renamed file is empty with retries
+            self._check_file_size_with_retries(output_path)
                 
         except OSError as e:
             if "[Errno 92] Illegal byte sequence" in str(e):
@@ -389,8 +384,59 @@ class SeleniumHandler:
                 simple_output_path = os.path.join(output_folder, simple_filename)
                 os.rename(downloaded_file, simple_output_path)
                 
-                # Check if renamed file is empty
-                if os.path.getsize(simple_output_path) == 0:
-                    raise Exception("File is empty (0 bytes)")
+                # Check if renamed file is empty with retries
+                self._check_file_size_with_retries(simple_output_path)
             else:
                 raise 
+
+    def _check_file_size_with_retries(self, file_path, max_retries=10, retry_delay=0.5):
+        """
+        Check if a file has non-zero size, with retries to handle in-progress downloads.
+        Also checks for corresponding .part files to detect in-progress downloads.
+        
+        If a .part file is detected, uses a 90-second max wait time.
+        If no .part file is found, uses the specified retry parameters.
+        
+        Args:
+            file_path: Path to the file to check
+            max_retries: Maximum number of retries (default 20 tries = 20 seconds total)
+            retry_delay: Delay between retries in seconds (default 1 second)
+            
+        Returns:
+            bool: True if file has non-zero size, False otherwise
+            
+        Raises:
+            Exception: If file remains empty after all retries
+        """
+        base_name = os.path.basename(file_path)
+        dir_path = os.path.dirname(file_path)
+        
+        # First check if there's a .part file
+        part_files = [f for f in os.listdir(dir_path) if f.endswith('.part') and base_name.split('_')[-1] in f]
+        
+        if part_files or base_name.endswith('.part'):
+            # Use 90-second max wait time for .part files
+            start_time = time.time()
+            max_wait = 90
+            
+            while time.time() - start_time < max_wait:
+                current_part_files = [f for f in os.listdir(dir_path) if f.endswith('.part') and base_name.split('_')[-1] in f]
+                
+                # If .part no longer exists, check the main file
+                if not current_part_files and not base_name.endswith('.part'):
+                    if os.path.getsize(file_path) > 0:
+                        return True
+                
+                time.sleep(0.5)
+                
+            raise Exception(f"File remains empty (0 bytes) or incomplete after 90-second wait: {file_path}")
+        
+        else:
+            # No .part file found, use standard retry logic
+            for attempt in range(max_retries):
+                if os.path.getsize(file_path) > 0:
+                    return True
+                    
+                time.sleep(retry_delay)
+                
+            raise Exception(f"File remains empty (0 bytes) after {max_retries} retries: {file_path}") 
