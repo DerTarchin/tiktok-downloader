@@ -43,18 +43,15 @@ def count_unique_videos(directory: str) -> tuple[Set[str], list[str]]:
     
     return unique_ids, txt_files
 
-def main():
-    if len(sys.argv) != 2:
-        print("Usage: python count_unique_videos.py <directory>")
-        sys.exit(1)
-    
-    directory = sys.argv[1]
+def process_directory(directory: str) -> tuple[Set[str], int]:
+    """Process the directory to count unique video IDs and collections."""
     if not os.path.isdir(directory):
         print(f"Error: {directory} is not a directory", file=sys.stderr)
         sys.exit(1)
     
     unique_ids, txt_files = count_unique_videos(directory)
     print(f"\nTotal unique videos to download: {len(unique_ids):,}")
+    
     # Count total collections (excluding uncategorized)
     regular_collections = sum(1 for f in txt_files if not f.startswith('uncategorized'))
     
@@ -63,6 +60,16 @@ def main():
     total_collections = regular_collections + (1 if has_uncategorized else 0)
     
     print(f"Total collections: {total_collections:,}")
+    
+    return unique_ids, total_collections
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python count_unique_videos.py <directory>")
+        sys.exit(1)
+    
+    directory = sys.argv[1]
+    process_directory(directory)
 
 if __name__ == "__main__":
     main() 

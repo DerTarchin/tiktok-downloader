@@ -4,6 +4,8 @@ import os
 import subprocess
 import threading
 from queue import Queue
+import shlex
+from urllib.parse import quote
 
 class SyncHandler:
     def __init__(self):
@@ -63,24 +65,44 @@ class SyncHandler:
             
         Returns:
             bool: True if copy was successful, False otherwise
+            
+        Raises:
+            RuntimeError: If the source directory doesn't exist or other rclone errors occur
         """
+        # First verify the source directory exists
+        if not os.path.exists(local_path):
+            error_msg = f"Source directory not found: {local_path}"
+            print(f">> Error: {error_msg}")
+            raise RuntimeError(error_msg)
+            
+        # Escape paths with special characters
+        escaped_local_path = shlex.quote(local_path)
+        escaped_remote_path = shlex.quote(remote_path)
+        
         cmd = [
-            "rclone", "copy",  # Changed from sync to copy
-            local_path,
-            remote_path,
+            "rclone",
+            "copy",
+            escaped_local_path,
+            escaped_remote_path,
         ] + self.rclone_modifiers
         
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            cmd_str = " ".join(cmd)
+            print(f">> Executing command: {cmd_str}")  # Log the exact command being run
+            result = subprocess.run(cmd_str, shell=True, capture_output=True, text=True)
+            
             if result.returncode != 0:
-                print(f">> Error copying{' folder ' + folder_name if folder_name else ''}: {result.stderr}")
-                return False
-            else:
-                print(f">> Successfully copied: {folder_name}")
-                return True
+                error_msg = f"rclone error copying{' folder ' + folder_name if folder_name else ''}: {result.stderr}"
+                print(f">> Error: {error_msg}")
+                raise RuntimeError(error_msg)
+            
+            print(f">> Successfully copied: {folder_name}")
+            return True
+            
         except Exception as e:
-            print(f">> Error during copy{' of ' + folder_name if folder_name else ''}: {e}")
-            return False
+            error_msg = f"Error during copy{' of ' + folder_name if folder_name else ''}: {str(e)}"
+            print(f">> Error: {error_msg}")
+            raise RuntimeError(error_msg) from e
 
     def _sync_and_delete_folder(self, local_path, username):
         """
@@ -152,8 +174,25 @@ class SyncHandler:
         """
         username = os.path.basename(input_path)
         remote_path = f"{self.gdrive_base_path}/{username}"
+
+        # Track if we have any queued tasks
+        has_queued_tasks = False
+
+        # Queue each folder corresponding to a text file
+        for file in os.listdir(input_path):
+            if file.endswith('.txt'):
+                folder_name = os.path.splitext(file)[0]
+                folder_path = os.path.join(input_path, folder_name)
+                if os.path.isdir(folder_path):
+                    self.queue_sync(folder_path, username)
+                    has_queued_tasks = True
         
-        # Sync using copy to preserve remote folders
+        # Only wait for syncs if we actually queued any tasks
+        if has_queued_tasks:
+            print(">> Waiting for folder syncs to complete...")
+            self.wait_for_syncs()
+        
+        # Sync text files and logs using copy to preserve remote folders
         cmd = [
             "rclone", "copy",  # Using copy instead of sync to preserve remote folders
             input_path,
@@ -167,22 +206,8 @@ class SyncHandler:
             print(f">> Error syncing remaining files: {result.stderr}")
         else:
             print(">> Successfully synced remaining files to Google Drive")
+            
+        # No need for a final wait since we already waited for queued tasks
+        # and the rclone command is synchronous
         
-        # Sync each folder corresponding to a text file
-        for file in os.listdir(input_path):
-            if file.endswith('.txt'):
-                folder_name = os.path.splitext(file)[0]
-                folder_path = os.path.join(input_path, folder_name)
-                if os.path.isdir(folder_path):
-                    folder_remote_path = f"{remote_path}/{folder_name}"
-                    folder_cmd = [
-                        "rclone", "copy",
-                        folder_path,
-                        folder_remote_path,
-                    ] + self.rclone_modifiers
-                    
-                    folder_result = subprocess.run(folder_cmd, capture_output=True, text=True)
-                    if folder_result.returncode != 0:
-                        print(f">> Error syncing folder {folder_name}: {folder_result.stderr}")
-                    else:
-                        print(f">> Successfully synced folder: {folder_name}") 
+        

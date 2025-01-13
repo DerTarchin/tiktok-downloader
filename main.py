@@ -28,7 +28,7 @@ def main():
     skip_private = "--skip-private" in sys.argv
     
     # Parse concurrent downloads setting
-    concurrent_downloads = 3
+    concurrent_downloads = 5 # default concurrent
     for i, arg in enumerate(sys.argv):
         if arg == "--concurrent" and i + 1 < len(sys.argv):
             try:

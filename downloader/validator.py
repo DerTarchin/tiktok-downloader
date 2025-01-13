@@ -137,10 +137,24 @@ class Validator:
                 if result.returncode == 0:
                     remote_files = result.stdout.splitlines()
                     for line in remote_files:
-                        # rclone ls format: "   12345 filename.mp4"
+                        line = line.strip()
+                        if not line:
+                            continue
+
+                        # Try to parse as normal "size filename" format first
                         try:
-                            size_str, filename = line.strip().split(maxsplit=1)
-                            file_size = int(size_str)
+                            parts = line.split(' ', 1)
+                            if len(parts) == 2:
+                                size_str, filename = parts
+                                try:
+                                    file_size = int(size_str)
+                                except ValueError:
+                                    # If first part isn't a number, treat the whole line as filename
+                                    filename = line
+                                    file_size = 1  # Assume non-zero size since file exists
+                            else:
+                                filename = line
+                                file_size = 1  # Assume non-zero size since file exists
                             
                             if filename.lower().endswith(video_extensions):
                                 file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension

@@ -220,15 +220,15 @@ class SeleniumHandler:
             else:
                 raise Exception("URL is neither a photo nor a video post")
 
+            # After successful download and validation, log success
+            file_handler.log_successful_download(url, collection_name)
+
         except Exception as e:
             if str(e) != "private":
                 print(f"\t-> Failed to download: {url}")
                 print(f"\t-> Current page URL: {self.driver.current_url}")
                 print(f"\t-> Error details: {e}")
             raise
-
-        # After successful download
-        file_handler.log_successful_download(url, collection_name)
 
     def _handle_photo_download(self, url, output_folder, video_id_suffix):
         """Handle photo download process"""

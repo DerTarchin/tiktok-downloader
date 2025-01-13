@@ -10,7 +10,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
 from downloader.tiktok_api import fetch_collections, format_video_url, fetch_collection_items
-from scripts.count_unique_videos import count_unique_videos
+from scripts.count_unique_videos import process_directory
 
 def main():
     """Main function to run the script."""
@@ -53,8 +53,8 @@ def main():
                     f.write(format_video_url(vid_id) + '\n')
             print(f"Saved {len(video_ids):,} video URLs to {output_file}")
                 
-        # Call count_unique_videos instead of the summary
-        count_unique_videos(args.output_dir)
+        # Call process_directory instead of count_unique_videos
+        process_directory(args.output_dir)
         return 0
             
     except Exception as e:
