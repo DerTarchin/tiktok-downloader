@@ -12,19 +12,21 @@ class Validator:
     def validate_downloads(self, input_path):
         """
         Validates that all videos from text files are either downloaded as MP4s or listed in error logs.
-        Returns a dictionary containing missing and extra IDs for each collection.
+        Also checks for zero-byte files.
         
         Returns:
             dict: {
                 'missing': {collection_name: set(missing_ids)},
-                'extra': {collection_name: {id: filename}}
+                'extra': {collection_name: {id: filename}},
+                'empty': {collection_name: {id: filename}}  # Zero-byte files
             }
         """
         print("\nValidating downloads...")
         
         validation_results = {
             'missing': {},
-            'extra': {}
+            'extra': {},
+            'empty': {}  # Zero-byte files
         }
         
         # Define video extensions at the start of the method
@@ -98,6 +100,7 @@ class Validator:
             downloaded_ids = set()
             downloaded_map = {}  # Map IDs to their filenames
             extra_ids = {}  # Store extra IDs and filenames
+            empty_files = {}  # Store zero-byte files
             
             # Check local folder if it exists
             if os.path.exists(collection_folder):
@@ -106,12 +109,18 @@ class Validator:
                               and f != ".DS_Store"]
                 
                 for filename in local_files:
+                    file_path = os.path.join(collection_folder, filename)
                     # Check for video files with matching ID pattern
                     if filename.lower().endswith(video_extensions):
                         file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
+                        file_size = os.path.getsize(file_path)
+                        
                         if file_id.isdigit():
-                            downloaded_ids.add(file_id)
-                            downloaded_map[file_id] = f"(local) {filename}"
+                            if file_size == 0:
+                                empty_files[file_id] = f"(local) {filename}"
+                            else:
+                                downloaded_ids.add(file_id)
+                                downloaded_map[file_id] = f"(local) {filename}"
                         else:
                             # Video files without valid IDs are considered extra
                             extra_ids[f"invalid_id_{len(extra_ids)}"] = f"(local) {filename}"
@@ -121,24 +130,35 @@ class Validator:
             
             # Check remote folder using rclone
             try:
-                cmd = ["rclone", "lsf", remote_path, "--fast-list"]
+                # Use rclone ls to get file sizes
+                cmd = ["rclone", "ls", remote_path, "--fast-list"]
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 
                 if result.returncode == 0:
                     remote_files = result.stdout.splitlines()
-                    for filename in remote_files:
-                        # print(f"Checking remote file: {filename}")
-                        if filename.lower().endswith(video_extensions):
-                            file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
-                            if file_id.isdigit():
-                                downloaded_ids.add(file_id)
-                                downloaded_map[file_id] = f"(remote) {filename}"
+                    for line in remote_files:
+                        # rclone ls format: "   12345 filename.mp4"
+                        try:
+                            size_str, filename = line.strip().split(maxsplit=1)
+                            file_size = int(size_str)
+                            
+                            if filename.lower().endswith(video_extensions):
+                                file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
+                                
+                                if file_id.isdigit():
+                                    if file_size == 0:
+                                        empty_files[file_id] = f"(remote) {filename}"
+                                    else:
+                                        downloaded_ids.add(file_id)
+                                        downloaded_map[file_id] = f"(remote) {filename}"
+                                else:
+                                    # Video files without valid IDs are considered extra
+                                    extra_ids[f"invalid_id_{len(extra_ids)}"] = f"(remote) {filename}"
                             else:
-                                # Video files without valid IDs are considered extra
-                                extra_ids[f"invalid_id_{len(extra_ids)}"] = f"(remote) {filename}"
-                        else:
-                            # Non-video files are considered extra
-                            extra_ids[f"non_video_{len(extra_ids)}"] = f"(remote) {filename}"
+                                # Non-video files are considered extra
+                                extra_ids[f"non_video_{len(extra_ids)}"] = f"(remote) {filename}"
+                        except ValueError:
+                            print(f"Warning: Could not parse rclone output line: {line}")
                 else:
                     print(f"Warning: Could not check remote folder: {result.stderr}")
             except Exception as e:
@@ -169,7 +189,7 @@ class Validator:
             downloaded_ids.update(success_ids)
             
             # Find missing and extra IDs
-            missing_ids = expected_ids - (downloaded_ids | error_ids)
+            missing_ids = expected_ids - (downloaded_ids | error_ids | set(empty_files.keys()))
             extra_ids = {id_: filename for id_, filename in downloaded_map.items() 
                         if id_ not in expected_ids}
             
@@ -178,19 +198,26 @@ class Validator:
                 validation_results['missing'][collection_name] = missing_ids
             if extra_ids:
                 validation_results['extra'][collection_name] = extra_ids
+            if empty_files:
+                validation_results['empty'][collection_name] = empty_files
             
             # Report findings
             if extra_ids:
                 print(f"{len(extra_ids):,} extra videos detected:")
                 for id_, filename in extra_ids.items():
-                    print(f"\t{id_}, Filename: {filename}")
+                    print(f"\t{id_}, {filename}")
             
             if missing_ids:
                 print(f"{len(missing_ids):,} missing videos detected:")
                 for vid_id in missing_ids:
                     print(f"\t{vid_id}")
+                    
+            if empty_files:
+                print(f"{len(empty_files):,} empty (zero-byte) files detected:")
+                for vid_id, filename in empty_files.items():
+                    print(f"\t{vid_id}, {filename}")
             
-            if not (extra_ids or missing_ids):
+            if not (extra_ids or missing_ids or empty_files):
                 print(f"✓ All videos accounted for in {collection_name}")
                 print(f"  Total unique IDs in text file: {len(expected_ids):,}")
                 print(f"  Downloaded: {len(downloaded_ids):,}")

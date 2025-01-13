@@ -167,7 +167,7 @@ def main():
     file_handler = FileHandler(args.input_path)
     results = validator.validate_downloads(args.input_path)
     
-    if not results['missing'] and not results['extra']:
+    if not results['missing'] and not results['extra'] and not results['empty']:
         print("\nNo issues found. All collections are valid.")
         return
 
@@ -244,7 +244,7 @@ def main():
             if video_id in videos_to_move:  # Skip if we moved this video
                 continue
                 
-            print(f"\nDeleting extra video {video_id} from {collection}")
+            print(f"Deleting extra video {video_id} from {collection}")
             is_remote = file_info.startswith('(remote)')
             filename = file_info.split(' ', 1)[1]  # Remove (local) or (remote) prefix
             
@@ -264,9 +264,16 @@ def main():
     for collection, missing_ids in results['missing'].items():
         for video_id in missing_ids:
             if video_id not in videos_to_move:  # Skip if we found this video in another collection
-                print(f"\nRemoving video {video_id} from download success log")
+                print(f"Removing video {video_id} from download success log")
                 if not args.dry_run:
                     remove_from_success_log(file_handler.success_log_path, video_id)
+
+    # Process empty videos (remove from success log)
+    for collection, empty_files in results['empty'].items():
+        for video_id, file_info in empty_files.items():
+            print(f"Removing empty video {video_id} from download success log")
+            if not args.dry_run:
+                remove_from_success_log(file_handler.success_log_path, video_id)
 
     if args.dry_run:
         print("\nThis was a dry run. No changes were made.")
@@ -277,7 +284,7 @@ def main():
         print("\nRunning final validation check...")
         final_results = validator.validate_downloads(args.input_path)
         
-        if not final_results['missing'] and not final_results['extra']:
+        if not final_results['missing'] and not final_results['extra'] and not final_results['empty']:
             print("\n✓ All issues have been resolved. Collections are now valid.")
         else:
             print("\n! Some issues could not be resolved:")
@@ -292,6 +299,12 @@ def main():
                 for collection, extra_videos in final_results['extra'].items():
                     print(f"\n{collection}:")
                     for video_id, file_info in extra_videos.items():
+                        print(f"  - {video_id} ({file_info})")
+            if final_results['empty']:
+                print("\nStill have empty (zero-byte) files:")
+                for collection, empty_files in final_results['empty'].items():
+                    print(f"\n{collection}:")
+                    for video_id, file_info in empty_files.items():
                         print(f"  - {video_id} ({file_info})")
 
 if __name__ == '__main__':

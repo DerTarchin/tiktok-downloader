@@ -239,6 +239,11 @@ class SeleniumHandler:
                             key=lambda f: os.path.getmtime(os.path.join(self.temp_download_dir, f))
                         )
                         downloaded_file = os.path.join(self.temp_download_dir, latest_file)
+                        
+                        # Check if file is empty before processing
+                        if os.path.getsize(downloaded_file) == 0:
+                            raise Exception("File is empty (0 bytes)")
+                            
                         self._process_downloaded_photo_file(downloaded_file, url, output_folder, video_id_suffix)
                         return
                 time.sleep(0.5)
@@ -262,8 +267,8 @@ class SeleniumHandler:
                         toast = self.driver.find_element(By.CSS_SELECTOR, 'div.toast')
                         if "Video is private or removed!" in toast.text:
                             nonlocal private_video
-                        private_video = True
-                        return True
+                            private_video = True
+                            return True
                     except:
                         pass
                     
@@ -311,9 +316,14 @@ class SeleniumHandler:
                                          capture_output=True, text=True)
                     if result.returncode != 0:
                         raise Exception(f"Curl download failed with error: {result.stderr}")
+                    download_path = simple_download_path
                 else:
                     raise Exception(f"Curl download failed with error: {result.stderr}")
-                    
+            
+            # Check if downloaded file is empty
+            if os.path.getsize(download_path) == 0:
+                raise Exception("File is empty (0 bytes)")
+
         except Exception as e:
             if str(e) == "private":
                 raise Exception("private")
@@ -354,10 +364,19 @@ class SeleniumHandler:
         time.sleep(1)
         try:
             os.rename(downloaded_file, output_path)
+            
+            # Check if renamed file is empty
+            if os.path.getsize(output_path) == 0:
+                raise Exception("File is empty (0 bytes)")
+                
         except OSError as e:
             if "[Errno 92] Illegal byte sequence" in str(e):
                 simple_filename = clean_filename(f"{video_id_suffix.strip()}.mp4")
                 simple_output_path = os.path.join(output_folder, simple_filename)
                 os.rename(downloaded_file, simple_output_path)
+                
+                # Check if renamed file is empty
+                if os.path.getsize(simple_output_path) == 0:
+                    raise Exception("File is empty (0 bytes)")
             else:
                 raise 

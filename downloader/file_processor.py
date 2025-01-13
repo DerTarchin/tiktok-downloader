@@ -97,34 +97,34 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                 # Handle results - only show errors/issues
                 for url, (success, error_msg) in results.items():
                     if error_msg == "private":
-                        print(f"\t  ❌ Private video: {url}")
+                        print(f"\t  ❌\tPrivate video: {url}")
                         file_handler.log_error(url, error_file_path, is_private=True)
                     elif error_msg in yt_dlp_handler.all_error_types:
-                        print(f"\t  ⚠️ {error_msg}, using Selenium: {url}")
+                        print(f"\t  ⚠️\t{error_msg}, using Selenium: {url}")
                         try:
                             selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
                         except Exception as e:
                             if str(e) == "private":
-                                print(f"\t  ❌ Private video: {url}")
+                                print(f"\t  ❌\tPrivate video: {url}")
                                 file_handler.log_error(url, error_file_path, is_private=True)
                             else:
-                                print(f"\t  ❌ Selenium failed: {str(e)}")
+                                print(f"\t  ❌\tSelenium failed: {str(e)}")
                                 file_handler.log_error(url, error_file_path)
                     elif not success:
-                        print(f"\t  ⚠️ yt-dlp failed ({error_msg}), using Selenium: {url}")
+                        print(f"\t  ⚠️\tyt-dlp failed ({error_msg}), using Selenium: {url}")
                         try:
                             selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
                         except Exception as e:
                             if str(e) == "private":
-                                print(f"\t  ❌ Private video: {url}")
+                                print(f"\t  ❌\tPrivate video: {url}")
                                 file_handler.log_error(url, error_file_path, is_private=True)
                             else:
-                                print(f"\t  ❌ Selenium failed: {str(e)}")
+                                print(f"\t  ❌\tSelenium failed: {str(e)}")
                                 file_handler.log_error(url, error_file_path)
                     else:
                         file_handler.log_successful_download(url, collection_name)
             except Exception as e:
-                print(f"\t  ❌ Batch processing failed: {str(e)}")
+                print(f"\t  ❌\tBatch processing failed: {str(e)}")
                 # Log errors for all URLs in the batch that haven't been handled
                 for url in batch:
                     if not file_handler.is_url_downloaded(url):
@@ -140,10 +140,10 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                 file_handler.log_successful_download(url, collection_name)
             except Exception as e:
                 if str(e) == "private":
-                    print(f"\t  ❌ Private photo: {url}")
+                    print(f"\t  ❌\tPrivate photo: {url}")
                     file_handler.log_error(url, error_file_path, is_private=True)
                 else:
-                    print(f"\t  ❌ Photo download failed: {str(e)}")
+                    print(f"\t  ❌\tPhoto download failed: {str(e)}")
                     file_handler.log_error(url, error_file_path)
 
     # After processing all URLs, queue the folder for syncing
@@ -235,16 +235,16 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                         file_handler.log_error(url, error_file_path, is_private=True)
                         continue
                     elif error_msg in yt_dlp_handler.all_error_types or not success:
-                        print(f"\t  ⚠️ {error_msg.capitalize()} error, using Selenium: {url}")
+                        print(f"\t  ⚠️\t{error_msg.capitalize()} error, using Selenium: {url}")
                         try:
                             selenium_handler.download_with_selenium(url, output_folder, file_handler)
                             success = True
                         except Exception as e:
                             if str(e) == "private":
-                                print(f"\t  ❌ Private video: {url}")
+                                print(f"\t  ❌\tPrivate video: {url}")
                                 file_handler.log_error(url, error_file_path, is_private=True)
                             else:
-                                print(f"\t  ❌ Selenium failed: {str(e)}")
+                                print(f"\t  ❌\tSelenium failed: {str(e)}")
                                 file_handler.log_error(url, error_file_path)
             
             except Exception as e:
