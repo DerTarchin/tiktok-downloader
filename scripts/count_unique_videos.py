@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from downloader.utils import extract_video_id
 
-def count_unique_videos(directory: str) -> Set[str]:
+def count_unique_videos(directory: str) -> tuple[Set[str], list[str]]:
     """Count unique video IDs across all non-log text files."""
     unique_ids = set()
 
@@ -41,7 +41,7 @@ def count_unique_videos(directory: str) -> Set[str]:
             print(f"Error reading {filename}: {e}", file=sys.stderr)
             continue
     
-    return unique_ids
+    return unique_ids, txt_files
 
 def main():
     if len(sys.argv) != 2:
@@ -53,7 +53,7 @@ def main():
         print(f"Error: {directory} is not a directory", file=sys.stderr)
         sys.exit(1)
     
-    unique_ids = count_unique_videos(directory)
+    unique_ids, txt_files = count_unique_videos(directory)
     print(f"\nTotal unique videos to download: {len(unique_ids):,}")
     # Count total collections (excluding uncategorized)
     regular_collections = sum(1 for f in txt_files if not f.startswith('uncategorized'))
