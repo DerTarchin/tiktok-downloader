@@ -55,6 +55,14 @@ def main():
     
     unique_ids = count_unique_videos(directory)
     print(f"\nTotal unique videos to download: {len(unique_ids):,}")
+    # Count total collections (excluding uncategorized)
+    regular_collections = sum(1 for f in txt_files if not f.startswith('uncategorized'))
+    
+    # Add 1 if there's an uncategorized collection
+    has_uncategorized = any(f.startswith('uncategorized') for f in txt_files)
+    total_collections = regular_collections + (1 if has_uncategorized else 0)
+    
+    print(f"Total collections: {total_collections:,}")
 
 if __name__ == "__main__":
     main() 

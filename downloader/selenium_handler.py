@@ -103,10 +103,22 @@ class SeleniumHandler:
         print("Selenium started")
 
     def shutdown(self):
-        """Quit the Selenium WebDriver"""
+        """Quit the Selenium WebDriver with timeout protection"""
         if self.driver:
-            self.driver.quit()
-            self.driver = None
+            try:
+                # Set page load timeout to 5 seconds to prevent hanging
+                self.driver.set_page_load_timeout(5)
+                # Try graceful shutdown first
+                self.driver.quit()
+            except Exception as e:
+                print(f"\nWarning: Graceful Selenium shutdown failed: {e}")
+                try:
+                    # Force kill the browser process if graceful shutdown fails
+                    self.driver.quit()
+                except:
+                    pass
+            finally:
+                self.driver = None
 
     def cleanup(self):
         """Alias for shutdown to maintain compatibility with signal handling"""

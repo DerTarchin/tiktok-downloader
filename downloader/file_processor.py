@@ -21,7 +21,8 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
    
     # Get collection name from file name
     collection_name = os.path.splitext(os.path.basename(file_path))[0]
-    # Don't use collection name for uncategorized files
+    display_name = collection_name
+    # For uncategorized files, keep the collection name for display
     if collection_name.startswith(file_handler.all_saves_name):
         collection_name = None
     
@@ -40,7 +41,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         urls = {url.strip() for url in f if url.strip()}
 
     if os.path.basename(file_path) != file_handler.all_saves_name:
-        print(f"\nProcessing {index} of {total_files} collections ({collection_name})")
+        print(f"\nProcessing {index} of {total_files} collections ({display_name})")
     
     # Get known private videos if skip_private is True
     known_private_urls = set()
