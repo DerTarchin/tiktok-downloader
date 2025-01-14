@@ -271,9 +271,16 @@ def main():
     # Process empty videos (remove from success log)
     for collection, empty_files in results['empty'].items():
         for video_id, file_info in empty_files.items():
-            print(f"Removing empty video {video_id} from download success log")
+            print(f"Removing empty video {video_id} from download success log and deleting file")
             if not args.dry_run:
+                # First delete the empty file
+                if delete_video(path, is_remote):
+                    print(f"Successfully deleted empty video {video_id}")
+                else:
+                    print(f"Failed to delete empty video {video_id}")
+                # Then remove from success log
                 remove_from_success_log(file_handler.success_log_path, video_id)
+                update_progress()
 
     if args.dry_run:
         print("\nThis was a dry run. No changes were made.")
