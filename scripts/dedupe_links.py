@@ -2,8 +2,13 @@
 """Script to deduplicate links in text files within a directory."""
 
 import os
-import argparse
 import sys
+
+# Add project root to Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
+
+import argparse
 from typing import Set, List, Dict
 from downloader.utils import extract_video_id
 

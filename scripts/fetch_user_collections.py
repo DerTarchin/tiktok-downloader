@@ -47,7 +47,13 @@ def main():
             video_ids = fetch_collection_items(collection_id)
             total_videos += len(video_ids)
             
+            # First try with just the collection name
             output_file = os.path.join(args.output_dir, f"{safe_name}.txt")
+            
+            # If file exists, use name with ID to avoid overwriting
+            if os.path.exists(output_file):
+                output_file = os.path.join(args.output_dir, f"{safe_name}_{collection_id}.txt")
+            
             with open(output_file, 'w') as f:
                 for vid_id in video_ids:
                     f.write(format_video_url(vid_id) + '\n')

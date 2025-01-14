@@ -226,7 +226,7 @@ class SeleniumHandler:
         except Exception as e:
             if str(e) != "private":
                 print(f"\t-> Failed to download: {url}")
-                print(f"\t-> Error details: {e}")
+                # print(f"\t-> Error details: {e}")
             raise
 
     def _handle_photo_download(self, url, output_folder, video_id_suffix):
@@ -429,7 +429,7 @@ class SeleniumHandler:
                 
                 time.sleep(0.5)
                 
-            raise Exception(f"File remains empty (0 bytes) or incomplete after 90-second wait: {file_path}")
+            raise Exception(f"File remains empty (0 bytes) or incomplete after 90-second wait: {base_name}")
         
         else:
             # No .part file found, use standard retry logic
@@ -439,4 +439,4 @@ class SeleniumHandler:
                     
                 time.sleep(retry_delay)
                 
-            raise Exception(f"File remains empty (0 bytes) after {max_retries} retries: {file_path}") 
+            raise Exception(f"File remains empty (0 bytes) after {max_retries} retries: {base_name}")
