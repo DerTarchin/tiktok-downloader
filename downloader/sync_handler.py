@@ -88,7 +88,6 @@ class SyncHandler:
         
         try:
             cmd_str = " ".join(cmd)
-            print(f">> Executing command: {cmd_str}")  # Log the exact command being run
             result = subprocess.run(cmd_str, shell=True, capture_output=True, text=True)
             
             if result.returncode != 0:
@@ -181,7 +180,8 @@ class SyncHandler:
         # Queue each folder corresponding to a text file
         for file in os.listdir(input_path):
             if file.endswith('.txt'):
-                folder_name = os.path.splitext(file)[0]
+                # Get folder name from file name, handling multiple extensions
+                folder_name = file.split('.')[0]  # Split on first dot
                 folder_path = os.path.join(input_path, folder_name)
                 if os.path.isdir(folder_path):
                     self.queue_sync(folder_path, username)

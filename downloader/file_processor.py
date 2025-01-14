@@ -19,16 +19,16 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         skip_private: Whether to skip known private videos
     """
    
-    # Get collection name from file name
-    collection_name = os.path.splitext(os.path.basename(file_path))[0]
+    # Get collection name from file name, handling multiple extensions
+    base_name = os.path.basename(file_path)
+    collection_name = base_name.split('.')[0]  # Split on first dot
     display_name = collection_name
     # For uncategorized files, keep the collection name for display
     if collection_name.startswith(file_handler.all_saves_name):
         collection_name = None
     
     # Create output folder based on collection name
-    output_folder = os.path.join(os.path.dirname(file_path), 
-                               os.path.splitext(os.path.basename(file_path))[0])
+    output_folder = os.path.join(os.path.dirname(file_path), collection_name)
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
         print(f"Created output folder: {os.path.basename(output_folder)}")
@@ -181,8 +181,9 @@ def process_error_logs(input_path, file_handler, selenium_handler,
     for error_file in error_files:
         # Get original collection name by removing error prefix and getting path
         original_collection = error_file[len(file_handler.error_prefix):]
-        original_collection_name = os.path.splitext(os.path.basename(original_collection))[0]
-        original_folder = os.path.splitext(original_collection)[0]
+        # Get collection name from file name, handling multiple extensions
+        original_collection_name = original_collection.split('.')[0]  # Split on first dot
+        original_folder = original_collection_name  # Use the same name for folder
         output_folder = os.path.join(input_path, original_folder)
         
         print(f"\nRetrying failed downloads for: {original_collection_name}")
