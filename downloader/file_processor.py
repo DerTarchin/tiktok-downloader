@@ -23,12 +23,13 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
     base_name = os.path.basename(file_path)
     collection_name = base_name.split('.')[0]  # Split on first dot
     display_name = collection_name
-    # For uncategorized files, keep the collection name for display
+    output_folder = os.path.join(os.path.dirname(file_path), collection_name)
+    
+    # For uncategorized files, set collection_name to None AFTER creating output_folder
     if collection_name.startswith(file_handler.all_saves_name):
         collection_name = None
     
-    # Create output folder based on collection name
-    output_folder = os.path.join(os.path.dirname(file_path), collection_name)
+    # Create output folder
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
         print(f"Created output folder: {os.path.basename(output_folder)}")

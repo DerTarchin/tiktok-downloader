@@ -144,11 +144,13 @@ def main():
                     print("\nProcessing uncategorized groups...")
                     for group_file in group_files:
                         group_num = int(group_file.split("Group ")[1].split(")")[0])
+                        print("hi")
                         process_file(group_file, group_num + regular_collection_end_index,
                                   total_files,
                                   file_handler, selenium_handler,
                                   yt_dlp_handler, sync_handler,
                                   skip_private=skip_private)
+                        print("bye")
                 elif os.path.exists(all_saves_path) and combine_uncategorized:
                     # Original behavior for non-split processing
                     remaining_uncategorized = os.path.join(input_path, 

@@ -114,6 +114,11 @@ class SyncHandler:
         Returns:
             bool: True if sync and delete were successful, False otherwise
         """
+        # Skip if path components are invalid
+        if not local_path or not username or local_path == os.path.dirname(local_path):
+            print(f">> Skipping invalid path: {local_path}")
+            return True
+            
         # Skip if folder doesn't exist
         if not os.path.exists(local_path):
             print(f">> Skipping non-existent folder: {os.path.basename(local_path)}")
