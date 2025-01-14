@@ -249,55 +249,61 @@ def sanitize_filename(name: str) -> str:
     """Sanitize a string to be used as a filename."""
     return re.sub(r'[<>:"/\\|?*]', '_', name)
 
-def fetch_collections(username: str) -> List[Dict]:
-    """Fetch all collections for a user."""
-    # Create a session to maintain cookies
+def fetch_collections(username: str, delay: float = 0) -> List[Dict]:
+    """
+    Fetch all collections for a TikTok user.
+    
+    Args:
+        username: TikTok username to fetch collections for
+        delay: Optional delay between requests in seconds (default: 0)
+        
+    Returns:
+        List of collection dictionaries containing id and name
+    """
     session = requests.Session()
     
-    # First get user's secUid
-    user_info = get_user_info(username, session)
-    if not user_info.get('secUid'):
-        raise ValueError(f"Could not find user with username: {username}")
+    try:
+        # Get user info first
+        user_info = get_user_info(username, session)
+        if not user_info or not user_info.get('secUid'):
+            raise ValueError(f"Could not get secUid for user @{username}")
         
-    collections = []
-    cursor = 0
-    has_more = True
-    
-    while has_more:
-        params = get_collection_list_params(username, user_info['secUid'], cursor)
+        collections = []
+        cursor = 0
+        has_more = True
         
-        try:
+        while has_more:
+            # Add delay if specified
+            if delay > 0 and cursor > 0:  # Don't delay on first request
+                import time
+                time.sleep(delay)
+                
+            params = get_collection_list_params(username, user_info['secUid'], cursor)
             response = session.get(
                 ENDPOINTS['collection_list'],
-                headers=DEFAULT_HEADERS,
-                params=params
+                params=params,
+                headers=DEFAULT_HEADERS
             )
             response.raise_for_status()
+            
             data = response.json()
+            items = data.get('collection_list', [])
             
-            items = data.get('collectionList', [])
-            if not items:
-                break
-                
             for item in items:
-                collection_name = item.get('name')
-                safe_name = sanitize_filename(collection_name)
                 collection = {
-                    'id': item.get('collectionId'),
-                    'name': safe_name,  # Use sanitized name
-                    'total': item.get('total')
+                    'id': item.get('collection_id'),
+                    'name': sanitize_filename(item.get('collection_name', ''))
                 }
-                collections.append(collection)
+                if collection['id'] and collection['name']:
+                    collections.append(collection)
             
+            has_more = data.get('has_more', False)
             cursor = data.get('cursor', 0)
-            has_more = data.get('hasMore', False)
             
-            print(f"Found {len(items):,} collections")
-                
-        except Exception as e:
-            print(f"Error fetching collections: {e}")
-            if hasattr(e, 'response'):
-                print(f"Response content: {e.response.content}")
-            break
-            
-    return collections 
+        return collections
+        
+    except Exception as e:
+        print(f"Error fetching collections: {e}")
+        if hasattr(e, 'response'):
+            print(f"Response content: {e.response.content}")
+        raise 

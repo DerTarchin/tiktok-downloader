@@ -16,6 +16,7 @@ def main():
     """Main function to run the script."""
     parser = argparse.ArgumentParser(description='Fetch all collections for a TikTok user')
     parser.add_argument('output_dir', help='Directory to save the collection files into')
+    parser.add_argument('--delay', type=float, default=0, help='Delay between requests in seconds (default: 0)')
     args = parser.parse_args()
     
     # Extract username from the final directory of the output path
@@ -23,7 +24,7 @@ def main():
     
     try:
         print(f"\nFetching collections for user @{username}...")
-        collections = fetch_collections(username)
+        collections = fetch_collections(username, delay=args.delay)
         
         if not collections:
             print("No collections found for this user")
@@ -43,8 +44,8 @@ def main():
             
             print(f"\nProcessing collection: {collection_name} ({collection_id}) ({collections.index(collection) + 1} of {len(collections)})")
             
-            # Use fetch_collection_items from tiktok_api
-            video_ids = fetch_collection_items(collection_id)
+            # Use fetch_collection_items from tiktok_api with delay
+            video_ids = fetch_collection_items(collection_id, delay=args.delay)
             total_videos += len(video_ids)
             
             # First try with just the collection name

@@ -36,9 +36,48 @@ class SyncHandler:
         """Queue a folder for syncing"""
         self.sync_queue.put((local_path, username))
 
-    def wait_for_syncs(self):
-        """Wait for all queued sync operations to complete"""
-        self.sync_queue.join()
+    def wait_for_syncs(self, show_progress=True):
+        """
+        Wait for all queued sync operations to complete
+        
+        Args:
+            show_progress: Whether to show live progress output for remaining syncs
+        """
+        # Store current queue size
+        remaining = self.sync_queue.qsize()
+        if remaining > 0:
+            print(f"\n>> Waiting for {remaining} sync operations to complete...")
+            
+            # Create a list to track tasks that need to be requeued
+            tasks = []
+            while not self.sync_queue.empty():
+                task = self.sync_queue.get()
+                if task is not None:  # Don't store the poison pill
+                    tasks.append(task)
+                self.sync_queue.task_done()
+            
+            # Stop existing thread
+            self.stop_sync_thread()
+            
+            # Process tasks with progress
+            for task in tasks:
+                local_path, username = task
+                folder_name = os.path.basename(local_path)
+                remote_path = f"{self.gdrive_base_path}/{username}/{folder_name}"
+                
+                try:
+                    # Run sync with progress output
+                    self._run_rclone_sync(local_path, remote_path, folder_name, show_progress=True)
+                    # Delete the folder after successful sync
+                    if os.path.exists(local_path):
+                        import shutil
+                        shutil.rmtree(local_path)
+                        print(f">> Deleted local folder: {folder_name}")
+                except Exception as e:
+                    print(f">> Error syncing {folder_name}: {str(e)}")
+            
+            # Restart the sync thread for any future tasks
+            self.start_sync_thread()
 
     def _background_sync_worker(self):
         """
@@ -54,7 +93,7 @@ class SyncHandler:
             self._sync_and_delete_folder(local_path, username)
             self.sync_queue.task_done()
 
-    def _run_rclone_sync(self, local_path, remote_path, folder_name=None):
+    def _run_rclone_sync(self, local_path, remote_path, folder_name=None, show_progress=False):
         """
         Helper function to run rclone copy (not sync) with error handling.
         
@@ -62,6 +101,7 @@ class SyncHandler:
             local_path: Path to local folder to copy
             remote_path: Remote Google Drive path to copy to
             folder_name: Optional name of folder for logging purposes
+            show_progress: Whether to show live progress output
             
         Returns:
             bool: True if copy was successful, False otherwise
@@ -88,16 +128,22 @@ class SyncHandler:
         
         try:
             cmd_str = " ".join(cmd)
-            result = subprocess.run(cmd_str, shell=True, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                error_msg = f"rclone error copying{' folder ' + folder_name if folder_name else ''}: {result.stderr}"
-                print(f">> Error: {error_msg}")
-                raise RuntimeError(error_msg)
+            if show_progress:
+                # Show live output
+                result = subprocess.run(cmd_str, shell=True, check=True)
+            else:
+                # Capture output during normal processing
+                result = subprocess.run(cmd_str, shell=True, capture_output=True, text=True, check=True)
             
             print(f">> Successfully copied: {folder_name}")
             return True
             
+        except subprocess.CalledProcessError as e:
+            error_msg = f"rclone error copying{' folder ' + folder_name if folder_name else ''}"
+            if not show_progress and hasattr(e, 'stderr'):
+                error_msg += f": {e.stderr}"
+            print(f">> Error: {error_msg}")
+            raise RuntimeError(error_msg) from e
         except Exception as e:
             error_msg = f"Error during copy{' of ' + folder_name if folder_name else ''}: {str(e)}"
             print(f">> Error: {error_msg}")
@@ -195,7 +241,7 @@ class SyncHandler:
         # Only wait for syncs if we actually queued any tasks
         if has_queued_tasks:
             print(">> Waiting for folder syncs to complete...")
-            self.wait_for_syncs()
+            self.wait_for_syncs(show_progress=True)
         
         # Sync text files and logs using copy to preserve remote folders
         cmd = [
@@ -206,11 +252,13 @@ class SyncHandler:
             "--include", "*.log",
         ] + self.rclone_modifiers
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f">> Error syncing remaining files: {result.stderr}")
-        else:
+        cmd_str = " ".join(cmd)
+        try:
+            # Always show progress for final sync
+            subprocess.run(cmd_str, shell=True, check=True)
             print(">> Successfully synced remaining files to Google Drive")
+        except subprocess.CalledProcessError as e:
+            print(f">> Error syncing remaining files")
             
         # No need for a final wait since we already waited for queued tasks
         # and the rclone command is synchronous
