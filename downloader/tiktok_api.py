@@ -287,12 +287,12 @@ def fetch_collections(username: str, delay: float = 0) -> List[Dict]:
             response.raise_for_status()
             
             data = response.json()
-            items = data.get('collection_list', [])
+            items = data.get('collectionList', [])
             
             for item in items:
                 collection = {
-                    'id': item.get('collection_id'),
-                    'name': sanitize_filename(item.get('collection_name', ''))
+                    'id': item.get('collectionId'),
+                    'name': sanitize_filename(item.get('name', ''))
                 }
                 if collection['id'] and collection['name']:
                     collections.append(collection)
