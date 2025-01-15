@@ -219,7 +219,7 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                     success = True
                 else:
                     # Try yt-dlp first
-                    success, error_msg = yt_dlp_handler.try_yt_dlp(url, output_folder)
+                    success, error_msg, download_speed = yt_dlp_handler.try_yt_dlp(url, output_folder)
                     
                     if error_msg == "private":
                         print(f"\t-> Video not available: {url}")

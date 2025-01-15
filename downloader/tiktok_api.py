@@ -292,7 +292,8 @@ def fetch_collections(username: str, delay: float = 0) -> List[Dict]:
             for item in items:
                 collection = {
                     'id': item.get('collectionId'),
-                    'name': sanitize_filename(item.get('name', ''))
+                    'name': sanitize_filename(item.get('name', '')),
+                    'total': int(item.get('total', '0'))
                 }
                 if collection['id'] and collection['name']:
                     collections.append(collection)

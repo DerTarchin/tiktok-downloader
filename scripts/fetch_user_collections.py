@@ -42,7 +42,8 @@ def main():
             collection_id = collection['id']
             safe_name = collection_name
             
-            print(f"\nProcessing collection: {collection_name} ({collection_id}) ({collections.index(collection) + 1} of {len(collections)})")
+            print(f"\nProcessing collection: {collection_name} ({collection_id}) ({collections.index(collection) + 1:,} of {len(collections):,})")
+            print(f"Total expected videos in collection: {collection['total']:,}")
             
             # Use fetch_collection_items from tiktok_api with delay
             video_ids = fetch_collection_items(collection_id, delay=args.delay)
