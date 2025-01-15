@@ -15,6 +15,10 @@ from urllib.parse import urlparse
 
 from .utils import clean_filename, extract_video_id, get_filename_suffix
 
+# Define constants for wait times
+MAX_WAIT_TIME_PART_FILE = 90  # Maximum wait time for .part files in seconds
+MAX_WAIT_TIME_SHORT = 5  # Maximum wait time for no file size change or download started in seconds
+
 MAX_FILENAME_LENGTH = 120
 
 class SeleniumHandler:
@@ -238,11 +242,12 @@ class SeleniumHandler:
             convert_button.click()
 
             # Wait for new file to appear in temp downloads directory
-            max_wait = 90
+            print(f"Waiting for download to start...")
             start_time = time.time()
-            while time.time() - start_time < max_wait:
+            while time.time() - start_time < MAX_WAIT_TIME_SHORT:  # Short timeout just to detect if download started
                 downloaded_files = os.listdir(self.temp_download_dir)
                 if downloaded_files:
+                    print(f"Found {len(downloaded_files)} files in download directory")
                     # Include .part files in the search but prioritize complete files
                     complete_files = [f for f in downloaded_files if not f.endswith('.part')]
                     if complete_files:
@@ -252,15 +257,18 @@ class SeleniumHandler:
                             key=lambda f: os.path.getmtime(os.path.join(self.temp_download_dir, f))
                         )
                         downloaded_file = os.path.join(self.temp_download_dir, latest_file)
+                        print(f"Selected most recent file: {latest_file}")
                         
-                        # Check if file is empty before processing with retries
+                        # Check if file is empty before processing
+                        print("Checking file size and waiting for download completion...")
                         self._check_file_size_with_retries(downloaded_file)
                         
+                        print("Processing downloaded photo file...")
                         self._process_downloaded_photo_file(downloaded_file, url, output_folder, video_id_suffix)
                         return
                 time.sleep(0.5)
                 
-            raise Exception("Timeout waiting for photo download")        
+            raise Exception(f"No download started after {MAX_WAIT_TIME_SHORT} seconds")
         except Exception as e:
             print(f"\t-> Failed at: Photo download process")
             raise
@@ -417,13 +425,12 @@ class SeleniumHandler:
         part_files = [f for f in os.listdir(dir_path) if f.endswith('.part') and base_name.split('_')[-1] in f]
         
         if part_files or base_name.endswith('.part'):
-            # Use 90-second max wait time for .part files
+            # Use max wait time for .part files
             start_time = time.time()
-            max_wait = 90
             last_size_change = time.time()
             last_size = 0
             
-            while time.time() - start_time < max_wait:
+            while time.time() - start_time < MAX_WAIT_TIME_PART_FILE:
                 current_part_files = [f for f in os.listdir(dir_path) if f.endswith('.part') and base_name.split('_')[-1] in f]
                 
                 # If .part no longer exists, check the main file
@@ -443,12 +450,12 @@ class SeleniumHandler:
                     last_size = current_size
                     last_size_change = time.time()
                     print(f"File {part_file} is downloading, current size: {current_size / 1_000_000:.2f} MB")
-                elif time.time() - last_size_change > 10:
-                    raise Exception(f"Download stalled - no file size changes for 10 seconds. Last size: {last_size / 1_000_000:.2f} MB")
+                elif time.time() - last_size_change > MAX_WAIT_TIME_SHORT:
+                    raise Exception(f"Download stalled - no file size changes for {MAX_WAIT_TIME_SHORT} seconds. Last size: {last_size / 1_000_000:.2f} MB")
                 
                 time.sleep(0.5)
                 
-            raise Exception(f"File remains empty (0 bytes) or incomplete after 90-second wait: {base_name}")
+            raise Exception(f"File remains empty (0 bytes) or incomplete after {MAX_WAIT_TIME_PART_FILE}-second wait: {base_name}")
         
         else:
             # No .part file found, use standard retry logic
