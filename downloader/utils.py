@@ -420,7 +420,10 @@ def print_final_summary(input_path, file_handler):
     summary_text += "FINAL SUMMARY\n"
     summary_text += "="*50 + "\n"
     summary_text += f"Total videos downloaded: {success_count:,}\n"
-    summary_text += f"Total private videos: {total_private:,}{' (i can\'t downlaod these, sorry)' if total_private > 0 else ''}\n"
+    if total_private > 0:
+        summary_text += f"Total private videos: {total_private:,} (I can't download these, sorry)\n"
+    else:
+        summary_text += "Total private videos: 0\n"
     summary_text += f"Total failed: {total_failed:,}\n"
     summary_text += f"Total size: {total_size}\n"
     summary_text += "="*50 + "\n"
