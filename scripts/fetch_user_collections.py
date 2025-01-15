@@ -62,7 +62,7 @@ def main():
             print(f"Saved {len(video_ids):,} video URLs to {output_file}")
                 
         # Call process_directory instead of count_unique_videos
-        process_directory(args.output_dir)
+        process_directory(args.output_dir, collections)
         return 0
             
     except Exception as e:
