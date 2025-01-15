@@ -187,17 +187,22 @@ def main():
                         break
 
     # Calculate total videos to process
-    total_videos = (len(videos_to_move) if not args.skip_move else 0) + sum(len(videos) for videos in results['extra'].values())
+    total_videos = (
+        (len(videos_to_move) if not args.skip_move else 0) + 
+        sum(len(videos) for videos in results['extra'].values()) +
+        sum(len(videos) for videos in results['empty'].values())
+    )
     videos_processed = 0
     last_percentage = -1  # Track last printed percentage to avoid duplicates
 
     def update_progress():
         nonlocal videos_processed, last_percentage
         videos_processed += 1
-        current_percentage = (videos_processed * 100) // total_videos
-        if current_percentage % 5 == 0 and current_percentage != last_percentage:
-            print(f"\nProgress: {current_percentage}% ({videos_processed:,}/{total_videos:,} videos processed)")
-            last_percentage = current_percentage
+        if total_videos > 0:  # Only calculate percentage if we have videos to process
+            current_percentage = (videos_processed * 100) // total_videos
+            if current_percentage % 5 == 0 and current_percentage != last_percentage:
+                print(f"\nProgress: {current_percentage}% ({videos_processed:,}/{total_videos:,} videos processed)")
+                last_percentage = current_percentage
 
     print(f"\nStarting to process {total_videos:,} videos...")
 
@@ -273,6 +278,15 @@ def main():
         for video_id, file_info in empty_files.items():
             print(f"Removing empty video {video_id} from download success log and deleting file")
             if not args.dry_run:
+                # Determine the path and whether it's remote
+                is_remote = file_info.startswith('(remote)')
+                filename = file_info.split(' ', 1)[1]  # Remove (local) or (remote) prefix
+                
+                if is_remote:
+                    path = f"{args.gdrive_base_path}/{os.path.basename(args.input_path)}/{collection}/{filename}"
+                else:
+                    path = os.path.join(args.input_path, collection, filename)
+                
                 # First delete the empty file
                 if delete_video(path, is_remote):
                     print(f"Successfully deleted empty video {video_id}")

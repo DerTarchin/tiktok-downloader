@@ -115,6 +115,11 @@ class SyncHandler:
             print(f">> Error: {error_msg}")
             raise RuntimeError(error_msg)
             
+        # Skip empty folders
+        if not os.listdir(local_path):
+            print(f">> Skipping empty folder: {folder_name}")
+            return True
+            
         # Escape paths with special characters
         escaped_local_path = shlex.quote(local_path)
         escaped_remote_path = shlex.quote(remote_path)
@@ -232,7 +237,7 @@ class SyncHandler:
         for file in os.listdir(input_path):
             if file.endswith('.txt'):
                 # Get folder name from file name, handling multiple extensions
-                folder_name = file.split('.')[0]  # Split on first dot
+                folder_name = file.rsplit('.', 1)[0]  # Split on the last dot
                 folder_path = os.path.join(input_path, folder_name)
                 if os.path.isdir(folder_path):
                     self.queue_sync(folder_path, username)
@@ -244,21 +249,27 @@ class SyncHandler:
             self.wait_for_syncs(show_progress=True)
         
         # Sync text files and logs using copy to preserve remote folders
+        escaped_input_path = shlex.quote(input_path)
+        escaped_remote_path = shlex.quote(remote_path)
+        
         cmd = [
             "rclone", "copy",  # Using copy instead of sync to preserve remote folders
-            input_path,
-            remote_path,
-            "--include", "*.txt",  # Only sync text files and logs
-            "--include", "*.log",
+            escaped_input_path,
+            escaped_remote_path,
+            "--filter", '"+ *.txt"',  # Only sync text files and logs
+            "--filter", '"+ *.log"',
+            "--filter", '"- geckodriver.log"',  # Exclude geckodriver.log specifically
+            "--filter", '"- *"',  # Exclude everything else
         ] + self.rclone_modifiers
         
         cmd_str = " ".join(cmd)
+
         try:
             # Always show progress for final sync
             subprocess.run(cmd_str, shell=True, check=True)
             print(">> Successfully synced remaining files to Google Drive")
         except subprocess.CalledProcessError as e:
-            print(f">> Error syncing remaining files")
+            print(f">> Error syncing remaining files: {str(e)}")
             
         # No need for a final wait since we already waited for queued tasks
         # and the rclone command is synchronous

@@ -267,10 +267,10 @@ def fetch_collections(username: str, delay: float = 0) -> List[Dict]:
         user_info = get_user_info(username, session)
         if not user_info or not user_info.get('secUid'):
             raise ValueError(f"Could not get secUid for user @{username}")
-        
         collections = []
         cursor = 0
         has_more = True
+        page = 1
         
         while has_more:
             # Add delay if specified
@@ -297,8 +297,11 @@ def fetch_collections(username: str, delay: float = 0) -> List[Dict]:
                 if collection['id'] and collection['name']:
                     collections.append(collection)
             
-            has_more = data.get('has_more', False)
-            cursor = data.get('cursor', 0)
+            print(f"Page {page}: {len(items)} collections found, total collected: {len(collections):,}")
+            
+            has_more = data.get('hasMore', False)
+            cursor = int(data.get('cursor', '0'))  # Convert cursor to int
+            page += 1
             
         return collections
         

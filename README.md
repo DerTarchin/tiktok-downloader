@@ -316,3 +316,34 @@ The script will:
 - Rename them to remove the leading dot
 - Handle both local and remote (Google Drive) files
 - Show progress and statistics
+
+### split_links.py
+
+A utility script to split a text file containing URLs into multiple files with a maximum number of lines per file.
+
+```bash
+# Basic usage (splits into files of 500 lines each)
+python scripts/split_links.py input_file.txt
+
+# Custom number of lines per file
+python scripts/split_links.py input_file.txt --max-lines 1000
+```
+
+The script will:
+
+- Read the input file
+- Split it into multiple files with max lines per file (default: 500)
+- Create files named like "original_name (Part 1).txt", "original_name (Part 2).txt", etc.
+- Show progress and statistics for each file created
+
+### remove_extensionless_files.py
+
+A utility script to find and delete files without extensions in remote TikTok Archives.
+
+```bash
+# Remove files without extensions for a user
+python scripts/remove_extensionless_files.py username
+
+# Show what would be done without making changes
+python scripts/remove_extensionless_files.py username --dry-run
+```
