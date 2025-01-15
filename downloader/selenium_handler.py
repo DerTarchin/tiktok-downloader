@@ -397,6 +397,8 @@ class SeleniumHandler:
         If a .part file is detected, uses a 90-second max wait time.
         If no .part file is found, uses the specified retry parameters.
         
+        Monitors file size changes and aborts if no changes detected for 10 seconds.
+        
         Args:
             file_path: Path to the file to check
             max_retries: Maximum number of retries (default 20 tries = 20 seconds total)
@@ -406,7 +408,7 @@ class SeleniumHandler:
             bool: True if file has non-zero size, False otherwise
             
         Raises:
-            Exception: If file remains empty after all retries
+            Exception: If file remains empty after all retries or if no size changes for 10 seconds
         """
         base_name = os.path.basename(file_path)
         dir_path = os.path.dirname(file_path)
@@ -418,14 +420,31 @@ class SeleniumHandler:
             # Use 90-second max wait time for .part files
             start_time = time.time()
             max_wait = 90
+            last_size_change = time.time()
+            last_size = 0
             
             while time.time() - start_time < max_wait:
                 current_part_files = [f for f in os.listdir(dir_path) if f.endswith('.part') and base_name.split('_')[-1] in f]
                 
                 # If .part no longer exists, check the main file
                 if not current_part_files and not base_name.endswith('.part'):
-                    if os.path.getsize(file_path) > 0:
+                    current_size = os.path.getsize(file_path)
+                    if current_size > 0:
+                        print(f"File {base_name} has been successfully downloaded with size: {current_size / 1_000_000:.2f} MB")
                         return True
+                else:
+                    # Check size of part file
+                    part_file = current_part_files[0] if current_part_files else base_name
+                    part_path = os.path.join(dir_path, part_file)
+                    current_size = os.path.getsize(part_path)
+                
+                # Check if file size has changed
+                if current_size != last_size:
+                    last_size = current_size
+                    last_size_change = time.time()
+                    print(f"File {part_file} is downloading, current size: {current_size / 1_000_000:.2f} MB")
+                elif time.time() - last_size_change > 10:
+                    raise Exception(f"Download stalled - no file size changes for 10 seconds. Last size: {last_size / 1_000_000:.2f} MB")
                 
                 time.sleep(0.5)
                 
@@ -434,9 +453,12 @@ class SeleniumHandler:
         else:
             # No .part file found, use standard retry logic
             for attempt in range(max_retries):
-                if os.path.getsize(file_path) > 0:
+                current_size = os.path.getsize(file_path)
+                if current_size > 0:
+                    print(f"File {base_name} has been successfully downloaded with size: {current_size / 1_000_000:.2f} MB")
                     return True
                     
+                print(f"Retry {attempt + 1}/{max_retries}: File {base_name} is still empty, waiting...")
                 time.sleep(retry_delay)
                 
             raise Exception(f"File remains empty (0 bytes) after {max_retries} retries: {base_name}")

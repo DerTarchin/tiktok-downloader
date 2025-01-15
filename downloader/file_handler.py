@@ -79,6 +79,22 @@ class FileHandler:
                 if attempt == max_retries - 1:  # Last attempt
                     raise  # Re-raise the exception if all retries failed
                 time.sleep(retry_delay)  # Wait before retrying
+        
+        # Remove from error log if exists
+        if collection_name:
+            # Get error log path for the collection
+            error_file_path = self.get_error_log_path(os.path.join(os.path.dirname(self.success_log_path), f"{collection_name}.txt"))
+            if os.path.exists(error_file_path):
+                try:
+                    with open(error_file_path, 'r') as f:
+                        lines = f.readlines()
+                    # Remove both normal and private entries for this URL
+                    with open(error_file_path, 'w') as f:
+                        f.writelines(line for line in lines 
+                                   if line.strip() != url and 
+                                   line.strip() != f"{url} (private)")
+                except IOError:
+                    pass  # Ignore errors when trying to clean error log
 
     def is_url_downloaded(self, url, collection_name=None):
         """
