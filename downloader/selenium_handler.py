@@ -420,10 +420,17 @@ class SeleniumHandler:
                     while time.time() - start_time < MAX_WAIT_TIME_RENDER:
                         self._dismiss_snaptik_ads()  # Check during render wait
                         try:
+                            # Check for fail element first
+                            fail_element = self.driver.find_element(By.CSS_SELECTOR, "span.alert-render")
+                            if fail_element.is_displayed():
+                                raise Exception("Failed to render photo - error element detected")
+                            
                             render_label = self.driver.find_element(By.CSS_SELECTOR, "p.render-label")
                             if render_label.text == "Render Completed":
                                 break
-                        except:
+                        except Exception as e:
+                            if "Failed to render photo" in str(e):
+                                raise
                             pass
                         time.sleep(0.5)
                     else:
