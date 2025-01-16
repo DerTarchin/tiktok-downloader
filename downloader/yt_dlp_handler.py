@@ -7,7 +7,7 @@ from queue import Queue
 from threading import Lock
 from .utils import get_filename_suffix
 
-MAX_FILENAME_LENGTH = 100
+MAX_FILENAME_LENGTH = 70
 
 class YtDlpHandler:
     def __init__(self, max_concurrent=3):

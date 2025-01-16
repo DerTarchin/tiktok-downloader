@@ -20,7 +20,7 @@ MAX_WAIT_TIME_PART_FILE = 90  # Maximum wait time for .part files in seconds
 MAX_WAIT_TIME_SHORT = 5  # Maximum wait time for no file size change or download started in seconds
 MAX_WAIT_TIME_RENDER = 90  # Maximum wait time for photo render completion
 
-MAX_FILENAME_LENGTH = 100
+MAX_FILENAME_LENGTH = 70
 
 class SeleniumHandler:
     def __init__(self, temp_download_dir, headless=True):
