@@ -347,3 +347,44 @@ python scripts/remove_extensionless_files.py username
 # Show what would be done without making changes
 python scripts/remove_extensionless_files.py username --dry-run
 ```
+
+### extract_post_links.py
+
+A utility script to extract TikTok video links from text files containing TikTok metadata and optionally download videos from tiktokv.us URLs. The script saves the extracted links in the same directory as the input file.
+
+#### Usage
+
+```bash
+python3 scripts/extract_post_links.py input_file1.txt [input_file2.txt ...] [-o custom_name.txt] [--download]
+```
+
+##### Arguments:
+
+- `input_files`: One or more text files containing TikTok metadata
+- `-o, --output`: Optional output filename for links (default: links.txt)
+- `--download`: Download videos from any tiktokv.us URLs found in the files
+
+##### Example:
+
+```bash
+# Process a single file (creates links.txt in same directory)
+python3 scripts/extract_post_links.py metadata.txt
+
+# Process multiple files (creates links.txt for each input file)
+python3 scripts/extract_post_links.py file1.txt file2.txt file3.txt
+
+# Specify custom output filename
+python3 scripts/extract_post_links.py metadata.txt -o my_links.txt
+
+# Extract links and download videos
+python3 scripts/extract_post_links.py metadata.txt --download
+```
+
+The script will:
+
+1. Extract all TikTok links from each input file and save them to a links.txt file (or specified filename) in the same directory as the input file
+2. If `--download` is specified:
+   - Create a directory named after the input file (without extension)
+   - Download videos from any tiktokv.us URLs found
+   - Save videos as "Video 1.mp4", "Video 2.mp4", etc.
+   - Skip any non-tiktokv.us URLs
