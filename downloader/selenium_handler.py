@@ -296,6 +296,10 @@ class SeleniumHandler:
                 )
                 self._dismiss_snaptik_ads()  # Check again before interacting
                 input_element.clear()
+                # Reformat tiktokv.com URLs to standard tiktok.com format
+                if "www.tiktokv.com" in url:
+                    video_id = extract_video_id(url)
+                    url = f"https://www.tiktok.com/@/video/{video_id}/"
                 input_element.send_keys(url)
             except Exception as e:
                 print(f"\t-> Failed at: Finding and entering URL in SnapTik input field")
