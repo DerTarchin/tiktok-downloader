@@ -20,7 +20,7 @@ MAX_WAIT_TIME_PART_FILE = 90  # Maximum wait time for .part files in seconds
 MAX_WAIT_TIME_SHORT = 5  # Maximum wait time for no file size change or download started in seconds
 MAX_WAIT_TIME_RENDER = 90  # Maximum wait time for photo render completion
 
-MAX_FILENAME_LENGTH = 120
+MAX_FILENAME_LENGTH = 100
 
 class SeleniumHandler:
     def __init__(self, temp_download_dir, headless=True):
@@ -203,8 +203,6 @@ class SeleniumHandler:
             except Exception as e:
                 if str(e) != "private":
                     print(f"\t-> Failed to download: {url}")
-                    print("\nSnapTik failed. Press Enter to continue...")
-                    input()
                 raise
 
     def _try_musicaldown_download(self, url, output_folder):
@@ -551,8 +549,9 @@ class SeleniumHandler:
             uploader = self.get_uploader_from_page(url)
             description = self._get_video_description()
             
-            if description:
-                filename = clean_filename(f"{(uploader + description)[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
+            # Only add description if it's different from uploader
+            if description and description.strip() != uploader.strip():
+                filename = clean_filename(f"{uploader} - {description[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
             else:
                 filename = clean_filename(f"{uploader[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
             
@@ -674,7 +673,7 @@ class SeleniumHandler:
                 if not current_part_files and not base_name.endswith('.part'):
                     current_size = os.path.getsize(file_path)
                     if current_size > 0:
-                        print(f"File {base_name} has been successfully downloaded with size: {current_size / 1_000_000:.2f} MB")
+                        print(f"File has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
                         return True
                 else:
                     # Check size of part file
@@ -699,7 +698,7 @@ class SeleniumHandler:
             for attempt in range(max_retries):
                 current_size = os.path.getsize(file_path)
                 if current_size > 0:
-                    print(f"File {base_name} has been successfully downloaded with size: {current_size / 1_000_000:.2f} MB")
+                    print(f"File has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
                     return True
                     
                 print(f"Retry {attempt + 1}/{max_retries}: File {base_name} is still empty, waiting...")
