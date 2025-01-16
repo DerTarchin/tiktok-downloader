@@ -18,6 +18,7 @@ from .utils import clean_filename, extract_video_id, get_filename_suffix
 # Define constants for wait times
 MAX_WAIT_TIME_PART_FILE = 90  # Maximum wait time for .part files in seconds
 MAX_WAIT_TIME_SHORT = 5  # Maximum wait time for no file size change or download started in seconds
+MAX_WAIT_TIME_RENDER = 90  # Maximum wait time for photo render completion
 
 MAX_FILENAME_LENGTH = 120
 
@@ -162,6 +163,7 @@ class SeleniumHandler:
     def download_with_selenium(self, url, output_folder, file_handler, collection_name=None):
         """
         Download video/photo using Selenium automation of musicaldown.com.
+        Falls back to snaptik.app if musicaldown fails.
         
         Args:
             url: URL to download
@@ -183,7 +185,30 @@ class SeleniumHandler:
                 os.remove(os.path.join(self.temp_download_dir, file))
             except Exception as e:
                 print(f"\t-> Warning: Could not remove temp file {file}: {e}")
-        
+
+        try:
+            # Try musicaldown first
+            self._try_musicaldown_download(url, output_folder)
+            # After successful download and validation, log success
+            file_handler.log_successful_download(url, collection_name)
+        except Exception as e:
+            if str(e) == "private":
+                raise
+            print(f"\t-> MusicalDown failed, trying SnapTik...")
+            try:
+                # Try snaptik as fallback
+                self._try_snaptik_download(url, output_folder)
+                # After successful download and validation, log success
+                file_handler.log_successful_download(url, collection_name)
+            except Exception as e:
+                if str(e) != "private":
+                    print(f"\t-> Failed to download: {url}")
+                    print("\nSnapTik failed. Press Enter to continue...")
+                    input()
+                raise
+
+    def _try_musicaldown_download(self, url, output_folder):
+        """Original musicaldown.com download logic"""
         # Get video ID from URL
         video_id_suffix = get_filename_suffix(url)
 
@@ -224,13 +249,225 @@ class SeleniumHandler:
             else:
                 raise Exception("URL is neither a photo nor a video post")
 
-            # After successful download and validation, log success
-            file_handler.log_successful_download(url, collection_name)
+        except Exception as e:
+            raise
+
+    def _dismiss_snaptik_ads(self):
+        """Attempt to dismiss any visible ad/popup elements on SnapTik"""
+        try:
+            # Look for dismiss button with specific class and attributes
+            dismiss_buttons = self.driver.find_elements(By.CSS_SELECTOR, 'div#dismiss-button.btn.skip[aria-label="Close ad"][role="button"][tabindex="0"]')
+            for button in dismiss_buttons:
+                if button.is_displayed():
+                    button.click()
+                    time.sleep(0.5)  # Brief pause after clicking
+
+            # Look for "Continue using the web" button
+            continue_buttons = self.driver.find_elements(By.CSS_SELECTOR, 'button.button.is-link.continue-web')
+            for button in continue_buttons:
+                if button.is_displayed():
+                    button.click()
+                    time.sleep(0.5)  # Brief pause after clicking
+        except:
+            pass
+
+    def _try_snaptik_download(self, url, output_folder):
+        """
+        Try downloading using snaptik.app as a fallback.
+        
+        Args:
+            url: URL to download
+            output_folder: Folder to save downloaded file to
+            
+        Raises:
+            Exception: If download fails at any step
+        """
+        video_id_suffix = get_filename_suffix(url)
+        
+        try:
+            # Navigate to snaptik
+            self.driver.get("https://snaptik.app/en2")
+            
+            # Check for and dismiss any initial ads
+            self._dismiss_snaptik_ads()
+            
+            # Find and fill URL input
+            try:
+                input_element = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='url']"))
+                )
+                self._dismiss_snaptik_ads()  # Check again before interacting
+                input_element.clear()
+                input_element.send_keys(url)
+            except Exception as e:
+                print(f"\t-> Failed at: Finding and entering URL in SnapTik input field")
+                raise Exception(f"Failed to find or interact with SnapTik URL input field: {str(e)}")
+
+            self._dismiss_snaptik_ads()  # Check before clicking submit
+
+            # Click submit button
+            try:
+                submit_button = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button.button.button-go.is-link.transition-all"))
+                )
+                self._dismiss_snaptik_ads()  # Check again right before clicking
+                submit_button.click()
+            except Exception as e:
+                print(f"\t-> Failed at: Finding and clicking SnapTik submit button")
+                raise Exception(f"Failed to find or click SnapTik submit button: {str(e)}")
+
+            # Check for and dismiss any ads that appeared after submission
+            self._dismiss_snaptik_ads()
+
+            # Wait for video title to appear
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "div.video-title"))
+                )
+                self._dismiss_snaptik_ads()  # Check after title appears
+            except Exception as e:
+                print(f"\t-> Failed at: Waiting for SnapTik video title")
+                raise Exception(f"Failed to find video title on SnapTik: {str(e)}")
+
+            # Get description and username
+            try:
+                self._dismiss_snaptik_ads()  # Check before getting text
+                description = self.driver.find_element(By.CSS_SELECTOR, "div.video-title").text
+                username = self.driver.find_element(By.CSS_SELECTOR, "div.video-title + span").text
+            except:
+                description = ""
+                username = ""
+
+            self._dismiss_snaptik_ads()  # Check before looking for download options
+
+            # First check which type of download is available
+            try:
+                # Look for both video and photo download elements
+                video_link = self.driver.find_element(By.CSS_SELECTOR, "a.download-file[data-event='server01_file']")
+                render_button = self.driver.find_element(By.CSS_SELECTOR, "button.btn-render")
+                
+                # Determine which one is displayed
+                if video_link.is_displayed():
+                    is_video = True
+                elif render_button.is_displayed():
+                    is_video = False
+                else:
+                    raise Exception("Neither video nor photo download options are visible")
+            except Exception as e:
+                if "Neither video nor photo download options are visible" in str(e):
+                    raise
+                # If element not found, try individual checks
+                try:
+                    video_link = self.driver.find_element(By.CSS_SELECTOR, "a.download-file[data-event='server01_file']")
+                    is_video = video_link.is_displayed()
+                except:
+                    try:
+                        render_button = self.driver.find_element(By.CSS_SELECTOR, "button.btn-render")
+                        is_video = not render_button.is_displayed()
+                    except:
+                        raise Exception("No video or photo download options found on SnapTik")
+
+            # Handle video download
+            if is_video:
+                try:
+                    self._dismiss_snaptik_ads()  # Check before getting href
+                    download_url = video_link.get_attribute("href")
+                    if not download_url:
+                        raise Exception("Download button found but href attribute is empty")
+
+                    if description:
+                        filename = clean_filename(f"{(username + ' - ' + description)[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
+                    else:
+                        filename = clean_filename(f"{username[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
+                    
+                    download_path = os.path.join(output_folder, filename)
+                    
+                    # Download using curl
+                    cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    if result.returncode != 0:
+                        if "[Errno 92] Illegal byte sequence" in result.stderr:
+                            simple_filename = f"{video_id_suffix.strip()}.mp4"
+                            if simple_filename.startswith('.'):
+                                simple_filename = simple_filename[1:]
+                            simple_download_path = os.path.join(output_folder, simple_filename)
+                            result = subprocess.run(["curl", "-L", "-s", download_url, "-o", simple_download_path],
+                                                capture_output=True, text=True)
+                            if result.returncode != 0:
+                                raise Exception(f"Curl download failed with error: {result.stderr}")
+                            download_path = simple_download_path
+                        else:
+                            raise Exception(f"Curl download failed with error: {result.stderr}")
+                    
+                    # Check if downloaded file is empty with retries
+                    self._check_file_size_with_retries(download_path)
+                    return
+                except Exception as e:
+                    print(f"\t-> Failed at: Video download process on SnapTik")
+                    raise
+
+            # Handle photo download
+            else:
+                try:
+                    self._dismiss_snaptik_ads()  # Check before clicking render
+                    render_button.click()
+                    
+                    # Wait for render completion
+                    start_time = time.time()
+                    while time.time() - start_time < MAX_WAIT_TIME_RENDER:
+                        self._dismiss_snaptik_ads()  # Check during render wait
+                        try:
+                            render_label = self.driver.find_element(By.CSS_SELECTOR, "p.render-label")
+                            if render_label.text == "Render Completed":
+                                break
+                        except:
+                            pass
+                        time.sleep(0.5)
+                    else:
+                        raise Exception("Photo render timed out")
+
+                    self._dismiss_snaptik_ads()  # Check before getting download link
+
+                    # Get download link
+                    download_link = self.driver.find_element(By.CSS_SELECTOR, "a.download-render")
+                    download_url = download_link.get_attribute("href")
+                    if not download_url:
+                        raise Exception("Photo download button found but href attribute is empty")
+
+                    if description:
+                        filename = clean_filename(f"{(username + ' - ' + description)[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
+                    else:
+                        filename = clean_filename(f"{username[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
+                    
+                    download_path = os.path.join(output_folder, filename)
+                    
+                    # Download using curl
+                    cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    if result.returncode != 0:
+                        if "[Errno 92] Illegal byte sequence" in result.stderr:
+                            simple_filename = f"{video_id_suffix.strip()}.mp4"
+                            if simple_filename.startswith('.'):
+                                simple_filename = simple_filename[1:]
+                            simple_download_path = os.path.join(output_folder, simple_filename)
+                            result = subprocess.run(["curl", "-L", "-s", download_url, "-o", simple_download_path],
+                                                capture_output=True, text=True)
+                            if result.returncode != 0:
+                                raise Exception(f"Curl download failed with error: {result.stderr}")
+                            download_path = simple_download_path
+                        else:
+                            raise Exception(f"Curl download failed with error: {result.stderr}")
+                    
+                    # Check if downloaded file is empty with retries
+                    self._check_file_size_with_retries(download_path)
+                    return
+                except Exception as e:
+                    print(f"\t-> Failed at: Photo download process on SnapTik")
+                    raise
 
         except Exception as e:
-            if str(e) != "private":
-                print(f"\t-> Failed to download: {url}")
-                # print(f"\t-> Error details: {e}")
             raise
 
     def _handle_photo_download(self, url, output_folder, video_id_suffix):
