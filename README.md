@@ -230,6 +230,28 @@ The script will:
 - Report the number of duplicates removed from each file
 - Show a summary of total duplicates removed
 
+### download_tiktok_audio.py
+
+A utility script to extract and download TikTok audio files from a text file containing sound links.
+
+```bash
+# Extract links only (saves to links.txt in same directory)
+python scripts/download_tiktok_audio.py input_file.txt
+
+# Download audio files (saves to Sounds directory)
+python scripts/download_tiktok_audio.py input_file.txt --download
+```
+
+The script will:
+
+- Extract TikTok sound links from the input file
+- Save extracted links to links.txt in the same directory as input file
+- Create a Sounds directory in the same location as input file
+- Optionally download audio files using musicaldown.com
+- Save audio files in MP3 format in the Sounds directory
+- Show progress for each processed link
+- Handle errors gracefully with detailed logging
+
 ### remove_group_duplicates.py
 
 A utility script to remove duplicate URLs from uncategorized group files if they exist in any regular collection file.

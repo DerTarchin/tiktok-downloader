@@ -266,10 +266,14 @@ class SyncHandler:
 
         try:
             # Always show progress for final sync
-            subprocess.run(cmd_str, shell=True, check=True)
+            process = subprocess.run(cmd_str, shell=True, check=True, timeout=300)  # 5 minute timeout
             print(">> Successfully synced remaining files to Google Drive")
+        except subprocess.TimeoutExpired:
+            print(">> Error: Final sync timed out after 5 minutes")
         except subprocess.CalledProcessError as e:
             print(f">> Error syncing remaining files: {str(e)}")
+        except Exception as e:
+            print(f">> Unexpected error during final sync: {str(e)}")
             
         # No need for a final wait since we already waited for queued tasks
         # and the rclone command is synchronous

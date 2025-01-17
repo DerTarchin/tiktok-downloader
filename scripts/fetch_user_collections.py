@@ -48,6 +48,8 @@ def main():
             collection_name = collection['name']
             collection_id = collection['id']
             safe_name = collection_name
+            while safe_name.endswith('.'):
+                safe_name = safe_name[:-1]
             
             print(f"\nProcessing collection: {collection_name} ({collection_id}) ({collections.index(collection) + 1:,} of {len(collections):,})")
             if collection.get('total'):  # Only print total if available
@@ -62,7 +64,7 @@ def main():
             
             # If file exists, use name with ID to avoid overwriting
             if os.path.exists(output_file):
-                output_file = os.path.join(args.output_dir, f"{safe_name}_{collection_id}.txt")
+                output_file = os.path.join(args.output_dir, f"{safe_name} ({collection_id}).txt")
             
             with open(output_file, 'w') as f:
                 for vid_id in video_ids:
