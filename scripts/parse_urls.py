@@ -3,8 +3,9 @@ import re
 import os
 
 def extract_urls(input_files, output_file):
-    # Initialize empty set to store unique URLs
-    all_urls = set()
+    # Initialize empty list to store URLs and a set to track seen URLs
+    all_urls = []
+    seen_urls = set()
     
     for input_file in input_files:
         # Resolve to absolute path
@@ -14,9 +15,12 @@ def extract_urls(input_files, output_file):
             with open(input_file, 'r', encoding='utf-8') as f:
                 content = f.read()
                 
-            # Find all URLs using regex and add to set
+            # Find all URLs using regex
             urls = re.findall(r'https?://[^\s<>"]+', content)
-            all_urls.update(urls)
+            for url in urls:
+                if url not in seen_urls:
+                    all_urls.append(url)
+                    seen_urls.add(url)
             print(f"Found {len(urls):,} URLs in {input_file}")
             
         except FileNotFoundError:
@@ -31,7 +35,7 @@ def extract_urls(input_files, output_file):
     # Write combined URLs to output file
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
-            for url in sorted(all_urls):
+            for url in all_urls:  # Write URLs in the order they were found
                 f.write(f"{url}\n")
         
         print(f"\nSuccessfully extracted {len(all_urls):,} unique URLs to {output_file}")
