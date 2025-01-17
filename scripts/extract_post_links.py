@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Script to extract TikTok links from text files and download videos from tiktokv.us URLs."""
+"""Script to extract TikTok links from text files and download videos."""
 
 import os
 import re
@@ -22,11 +22,7 @@ def extract_links(input_file):
     return links
 
 def download_video(url, output_path, index, max_retries=3):
-    """Download video using curl if it's a tiktokv.us URL."""
-    if 'tiktokv.us' not in url:
-        print(f"Skipping non-tiktokv.us URL: {url}")
-        return False
-        
+    """Download video using curl."""
     output_file = os.path.join(output_path, f"Video {index}.mp4")
     
     for attempt in range(max_retries):
@@ -85,10 +81,11 @@ def download_video(url, output_path, index, max_retries=3):
     return False
 
 def main():
-    parser = argparse.ArgumentParser(description='Extract TikTok links from text files and download videos.')
-    parser.add_argument('input_files', nargs='+', help='Input text files to process')
+    parser = argparse.ArgumentParser(description='Extract links from text files and download videos.')
+    parser.add_argument('input_file', help='Input text file to process')
+    parser.add_argument('--download', action='store_true', help='Download videos from extracted URLs')
+    parser.add_argument('input_files', nargs='*', help='Additional input files to process')
     parser.add_argument('-o', '--output', help='Optional output filename for links (default: links.txt in same directory as input file)')
-    parser.add_argument('--download', action='store_true', help='Download videos from tiktokv.us URLs')
     parser.add_argument('--min-size', type=int, default=500, help='Minimum file size in KB (default: 500)')
     
     args = parser.parse_args()
@@ -97,7 +94,10 @@ def main():
     global MIN_FILE_SIZE
     MIN_FILE_SIZE = args.min_size * 1024
     
-    for input_file in args.input_files:
+    # Combine all input files
+    all_input_files = [args.input_file] + args.input_files
+    
+    for input_file in all_input_files:
         if not os.path.exists(input_file):
             print(f"Warning: File {input_file} does not exist, skipping...")
             continue
