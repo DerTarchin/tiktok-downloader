@@ -17,22 +17,29 @@ def main():
     parser = argparse.ArgumentParser(description='Fetch all collections for a TikTok user')
     parser.add_argument('output_dir', help='Directory to save the collection files into')
     parser.add_argument('--delay', type=float, default=0, help='Delay between requests in seconds (default: 0)')
+    parser.add_argument('--directory', help='Path to directory.log file to use instead of fetching collections')
     args = parser.parse_args()
     
     # Extract username from the final directory of the output path
     username = os.path.basename(os.path.normpath(args.output_dir))
     
     try:
-        print(f"\nFetching collections for user @{username}...")
-        collections = fetch_collections(username, delay=args.delay)
+        # Create output directory if it doesn't exist
+        os.makedirs(args.output_dir, exist_ok=True)
+        
+        if args.directory:
+            print(f"\nUsing collections from {args.directory}...")
+            collections = fetch_collections(username, delay=args.delay, directory_path=args.directory)
+        else:
+            print(f"\nFetching collections for user @{username}...")
+            # Pass output directory for saving directory.log
+            directory_path = os.path.join(args.output_dir, "directory.log")
+            collections = fetch_collections(username, delay=args.delay, save_to=directory_path)
         
         if not collections:
             print("No collections found for this user")
             return 1
                     
-        # Create output directory if it doesn't exist
-        os.makedirs(args.output_dir, exist_ok=True)
-        
         # Track total videos while processing collections
         total_videos = 0
         
@@ -43,7 +50,8 @@ def main():
             safe_name = collection_name
             
             print(f"\nProcessing collection: {collection_name} ({collection_id}) ({collections.index(collection) + 1:,} of {len(collections):,})")
-            print(f"Total expected videos in collection: {collection['total']:,}")
+            if collection.get('total'):  # Only print total if available
+                print(f"Total expected videos in collection: {collection['total']:,}")
             
             # Use fetch_collection_items from tiktok_api with delay
             video_ids = fetch_collection_items(collection_id, delay=args.delay)

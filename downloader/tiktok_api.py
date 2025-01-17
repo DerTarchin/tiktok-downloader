@@ -2,6 +2,8 @@
 
 import requests
 import re
+import time
+import os
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -62,6 +64,11 @@ BASE_PARAMS = {
     'user_is_login': 'false',
     'webcast_language': 'en'
 }
+
+# Add rate limit constants
+MAX_RETRIES = 5
+INITIAL_BACKOFF = 5  # Initial backoff time in seconds
+MAX_BACKOFF = 60    # Maximum backoff time in seconds
 
 def extract_collection_id(url: str) -> Optional[str]:
     """Extract collection ID from TikTok collection URL."""
@@ -249,17 +256,53 @@ def sanitize_filename(name: str) -> str:
     """Sanitize a string to be used as a filename."""
     return re.sub(r'[<>:"/\\|?*]', '_', name)
 
-def fetch_collections(username: str, delay: float = 0) -> List[Dict]:
+def save_collections_directory(collections: List[Dict], output_path: str = "directory.log"):
+    """Save collections list to a directory file."""
+    try:
+        with open(output_path, 'w', encoding='utf-8') as f:
+            for collection in collections:
+                f.write(f"[{collection['id']}] {collection['name']}\n")
+        print(f"\nSaved {len(collections)} collections to {output_path}")
+    except Exception as e:
+        print(f"Error saving directory: {e}")
+
+def read_collections_directory(directory_path: str) -> List[Dict]:
+    """Read collections from a directory file."""
+    collections = []
+    try:
+        with open(directory_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                # Parse [id] name format
+                if match := re.match(r'\[(\d+)\]\s+(.+)$', line.strip()):
+                    collection_id, name = match.groups()
+                    collections.append({
+                        'id': collection_id,
+                        'name': name,
+                        'total': 0  # We don't have this info from the file
+                    })
+        print(f"\nLoaded {len(collections)} collections from {directory_path}")
+        return collections
+    except Exception as e:
+        print(f"Error reading directory: {e}")
+        raise
+
+def fetch_collections(username: str, delay: float = 0, directory_path: Optional[str] = None, save_to: Optional[str] = None) -> List[Dict]:
     """
-    Fetch all collections for a TikTok user.
+    Fetch all collections for a TikTok user with retry logic.
     
     Args:
         username: TikTok username to fetch collections for
         delay: Optional delay between requests in seconds (default: 0)
+        directory_path: Optional path to read collections from instead of fetching
+        save_to: Optional path to save directory.log to (default: directory.log in current dir)
         
     Returns:
         List of collection dictionaries containing id and name
     """
+    # If directory path is provided, read from it instead of fetching
+    if directory_path and os.path.exists(directory_path):
+        return read_collections_directory(directory_path)
+    
     session = requests.Session()
     
     try:
@@ -271,39 +314,78 @@ def fetch_collections(username: str, delay: float = 0) -> List[Dict]:
         cursor = 0
         has_more = True
         page = 1
+        retry_count = 0
+        current_backoff = INITIAL_BACKOFF
         
         while has_more:
-            # Add delay if specified
-            if delay > 0 and cursor > 0:  # Don't delay on first request
-                import time
-                time.sleep(delay)
+            try:
+                # Add delay if specified
+                if delay > 0 and cursor > 0:  # Don't delay on first request
+                    time.sleep(delay)
+                    
+                params = get_collection_list_params(username, user_info['secUid'], cursor)
+                response = session.get(
+                    ENDPOINTS['collection_list'],
+                    params=params,
+                    headers=DEFAULT_HEADERS
+                )
+                response.raise_for_status()
                 
-            params = get_collection_list_params(username, user_info['secUid'], cursor)
-            response = session.get(
-                ENDPOINTS['collection_list'],
-                params=params,
-                headers=DEFAULT_HEADERS
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            items = data.get('collectionList', [])
-            
-            for item in items:
-                collection = {
-                    'id': item.get('collectionId'),
-                    'name': sanitize_filename(item.get('name', '')),
-                    'total': int(item.get('total', '0'))
-                }
-                if collection['id'] and collection['name']:
-                    collections.append(collection)
-            
-            print(f"Page {page}: {len(items)} collections found, total collected: {len(collections):,}")
-            
-            has_more = data.get('hasMore', False)
-            cursor = int(data.get('cursor', '0'))  # Convert cursor to int
-            page += 1
-            
+                data = response.json()
+                
+                # Check for rate limit or error response
+                if data.get('statusCode') == 10101 or response.status_code == 500:
+                    if retry_count >= MAX_RETRIES:
+                        raise Exception(f"Max retries ({MAX_RETRIES}) exceeded. Last error: {data.get('statusMsg', 'Rate limited')}")
+                    
+                    print(f"\nRate limited, waiting {current_backoff} seconds before retry {retry_count + 1}/{MAX_RETRIES}...")
+                    time.sleep(current_backoff)
+                    
+                    # Exponential backoff with jitter
+                    current_backoff = min(current_backoff * 2 + (time.time() % 1), MAX_BACKOFF)
+                    retry_count += 1
+                    continue
+                
+                # Reset retry count and backoff on successful request
+                retry_count = 0
+                current_backoff = INITIAL_BACKOFF
+                
+                items = data.get('collectionList', [])
+                
+                for item in items:
+                    collection = {
+                        'id': item.get('collectionId'),
+                        'name': sanitize_filename(item.get('name', '')),
+                        'total': int(item.get('total', '0'))
+                    }
+                    if collection['id'] and collection['name']:
+                        collections.append(collection)
+                
+                print(f"Page {page}: {len(items)} collections found, total collected: {len(collections):,}")
+                
+                has_more = data.get('hasMore', False)
+                cursor = int(data.get('cursor', '0'))  # Convert cursor to int
+                page += 1
+                
+            except requests.exceptions.RequestException as e:
+                if retry_count >= MAX_RETRIES:
+                    print(f"\nFailed after {MAX_RETRIES} retries")
+                    raise
+                
+                print(f"\nRequest error, waiting {current_backoff} seconds before retry {retry_count + 1}/{MAX_RETRIES}...")
+                if hasattr(e, 'response'):
+                    print(f"Response content: {e.response.content}")
+                
+                time.sleep(current_backoff)
+                current_backoff = min(current_backoff * 2 + (time.time() % 1), MAX_BACKOFF)
+                retry_count += 1
+                continue
+        
+        # Save collections to directory file after successful fetch
+        if save_to:
+            save_collections_directory(collections, save_to)
+        else:
+            save_collections_directory(collections)  # Use default path
         return collections
         
     except Exception as e:
