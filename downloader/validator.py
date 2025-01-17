@@ -72,7 +72,9 @@ class Validator:
         
         for txt_file in text_files:
             # Get collection name from file name, handling multiple extensions
-            collection_name = txt_file.split('.')[0]  # Split on first dot
+            collection_name = txt_file.split('.txt')[0]
+            while collection_name.endswith('.'):
+                collection_name = collection_name[:-1]
             collection_folder = os.path.join(input_path, collection_name)
             txt_path = os.path.join(input_path, txt_file)
             error_log_path = os.path.join(input_path, f"{self.error_prefix}{txt_file}")

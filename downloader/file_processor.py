@@ -18,10 +18,12 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         sync_handler: SyncHandler instance
         skip_private: Whether to skip known private videos
     """
-   
+
     # Get collection name from file name, handling multiple extensions
     base_name = os.path.basename(file_path)
-    collection_name = base_name.split('.')[0]  # Split on first dot
+    collection_name = base_name.split('.txt')[0]
+    while collection_name.endswith('.'):
+        collection_name = collection_name[:-1]
     display_name = collection_name
     output_folder = os.path.join(os.path.dirname(file_path), collection_name)
     
@@ -183,7 +185,9 @@ def process_error_logs(input_path, file_handler, selenium_handler,
         # Get original collection name by removing error prefix and getting path
         original_collection = error_file[len(file_handler.error_prefix):]
         # Get collection name from file name, handling multiple extensions
-        original_collection_name = original_collection.split('.')[0]  # Split on first dot
+        original_collection_name = original_collection.split('.txt')[0]
+        while original_collection_name.endswith('.'):
+            original_collection_name = original_collection_name[:-1]
         original_folder = original_collection_name  # Use the same name for folder
         output_folder = os.path.join(input_path, original_folder)
         
