@@ -175,12 +175,6 @@ def process_error_logs(input_path, file_handler, selenium_handler,
         print("No error logs found.")
         return
     
-    # Wait for all queued sync operations to complete before starting error retries
-    print("Waiting for all queued sync operations to complete before starting error retries...")
-    sync_handler.wait_for_syncs()
-    
-    folders_to_sync = set()  # Track folders that need syncing
-    
     for error_file in error_files:
         # Get original collection name by removing error prefix and getting path
         original_collection = error_file[len(file_handler.error_prefix):]
@@ -235,6 +229,7 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                         with open(error_file_path, 'w') as f:
                             for line in lines:
                                 line_url = line.strip().replace(' (private)', '')
+                                
                                 if extract_video_id(line_url) != target_video_id:
                                     f.write(line)
                         # Now log the error as private
@@ -268,9 +263,11 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                 # Log successful download
                 file_handler.log_successful_download(url, original_collection_name)
         
-        # If we had any successes, add the folder to sync queue
+        # If we had any successes, queue the folder for sync immediately
         if had_success:
-            folders_to_sync.add(output_folder)
+            username = os.path.basename(input_path)
+            sync_handler.queue_sync(output_folder, username)
+            print(f">> Queued for background sync: {os.path.basename(output_folder)}")
         else:
             # If no successes and folder is empty, remove it
             if os.path.exists(output_folder) and not os.listdir(output_folder):
@@ -288,11 +285,4 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                 os.remove(error_file_path)
                 print(f"\tAll URLs successfully downloaded for {original_collection_name}")
             else:
-                print(f"\tSome URLs still failed for {original_collection_name}")
-    
-    # Queue all folders that had successful downloads for sync
-    if folders_to_sync:
-        username = os.path.basename(input_path)
-        for folder in folders_to_sync:
-            sync_handler.queue_sync(folder, username)
-            print(f">> Queued for background sync: {os.path.basename(folder)}") 
+                print(f"\tSome URLs still failed for {original_collection_name}") 

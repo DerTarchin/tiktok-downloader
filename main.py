@@ -172,14 +172,14 @@ def main():
             print("\n>> Waiting for background syncs to complete...")
             sync_handler.wait_for_syncs()
             
-            # Process error logs after all syncs are complete
+            # Process error logs
             process_error_logs(input_path if os.path.isdir(input_path) 
                              else os.path.dirname(input_path),
                              file_handler, selenium_handler,
                              yt_dlp_handler, sync_handler)
             
-            # Wait for any new syncs from error retries
-            print("\n>> Waiting for error retry syncs to complete...")
+            # Wait for all syncs to complete
+            print("\n>> Waiting for all syncs to complete...")
             sync_handler.wait_for_syncs()
             
             # Stop the sync thread
