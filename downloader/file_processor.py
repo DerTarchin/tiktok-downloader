@@ -1,7 +1,106 @@
 """File processing functions for TikTok downloader."""
 
 import os
-from .utils import extract_video_id
+import threading
+from queue import Queue
+from .utils import extract_video_id, split_urls_by_type, get_output_folder, get_error_file_path
+
+# Queue for failed yt-dlp downloads that need selenium processing
+selenium_queue = Queue()
+selenium_thread = None
+selenium_thread_stop = threading.Event()
+selenium_total_items = 0
+selenium_processed_items = 0
+selenium_counter_lock = threading.Lock()
+
+def selenium_worker(selenium_handler, file_handler, yt_dlp_handler, output_folder):
+    """Worker thread that processes failed yt-dlp downloads using Selenium."""
+    global selenium_processed_items, selenium_total_items
+    
+    while not selenium_thread_stop.is_set():
+        try:
+            # Get next item from queue with timeout to allow checking stop flag
+            try:
+                url, collection_name, error_msg = selenium_queue.get(timeout=1)
+            except:
+                # Reset counters if queue is empty
+                if selenium_queue.empty():
+                    with selenium_counter_lock:
+                        selenium_processed_items = 0
+                        selenium_total_items = 0
+                continue
+                
+            try:
+                error_file_path = get_error_file_path(output_folder)
+                
+                # Update progress counter
+                with selenium_counter_lock:
+                    selenium_processed_items += 1
+                    current = selenium_processed_items
+                    total = selenium_total_items
+                    print(f"\n[Selenium Progress: {current}/{total}]")
+                
+                # Handle different error types
+                if error_msg == "private":
+                    print(f"\t  ❌\tPrivate video: {url}")
+                    file_handler.log_error(url, error_file_path, is_private=True)
+                    continue  # Skip selenium attempt but let finally block handle task_done
+                    
+                # For all other errors, try selenium
+                if error_msg in yt_dlp_handler.all_error_types:
+                    print(f"\t  ⚠️\t{error_msg}, using Selenium: {url}")
+                else:
+                    print(f"\t  ⚠️\tyt-dlp failed ({error_msg}), using Selenium: {url}")
+                    
+                try:
+                    selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
+                    file_handler.log_successful_download(url, collection_name)
+                except Exception as e:
+                    if str(e) == "private":
+                        print(f"\t  ❌\tPrivate video: {url}")
+                        file_handler.log_error(url, error_file_path, is_private=True)
+                    else:
+                        print(f"\t  ❌\tSelenium failed: {str(e)}")
+                        file_handler.log_error(url, error_file_path)
+                        
+            except Exception as e:
+                print(f"\t  ❌\tSelenium worker error for {url}: {str(e)}")
+                error_file_path = get_error_file_path(output_folder)
+                file_handler.log_error(url, error_file_path)
+            finally:
+                selenium_queue.task_done()  # Only call task_done once, in finally block
+        except Exception as e:
+            print(f"\t  ❌\tSelenium worker error: {str(e)}")
+
+def start_selenium_thread(selenium_handler, file_handler, yt_dlp_handler, output_folder):
+    """Start the Selenium worker thread."""
+    global selenium_thread, selenium_processed_items, selenium_total_items
+    selenium_thread_stop.clear()
+    selenium_processed_items = 0
+    selenium_total_items = 0
+    selenium_thread = threading.Thread(
+        target=selenium_worker,
+        args=(selenium_handler, file_handler, yt_dlp_handler, output_folder),
+        daemon=True
+    )
+    selenium_thread.start()
+
+def queue_selenium_download(url, collection_name, error_msg):
+    """Queue a URL for selenium download and update counter."""
+    global selenium_total_items
+    with selenium_counter_lock:
+        selenium_total_items += 1
+    selenium_queue.put((url, collection_name, error_msg))
+
+def stop_selenium_thread():
+    """Stop the Selenium worker thread and wait for it to finish."""
+    if selenium_thread:
+        selenium_thread_stop.set()
+        selenium_thread.join()
+        
+def wait_for_selenium_queue():
+    """Wait for all queued Selenium downloads to complete."""
+    selenium_queue.join()
 
 def process_file(file_path, index, total_files, file_handler, selenium_handler, 
                 yt_dlp_handler, sync_handler, skip_private=False, skip_sync=False):
@@ -40,115 +139,100 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
     # Get error log path
     error_file_path = file_handler.get_error_log_path(file_path)
     
-    # Read URLs from file
-    with open(file_path, "r") as f:
-        urls = {url.strip() for url in f if url.strip()}
+    # Start selenium worker thread if not already running
+    if not selenium_thread or not selenium_thread.is_alive():
+        start_selenium_thread(selenium_handler, file_handler, yt_dlp_handler, output_folder)
+    
+    try:
+        # Read URLs from file
+        with open(file_path, "r") as f:
+            urls = {url.strip() for url in f if url.strip()}
 
-    if os.path.basename(file_path) != file_handler.all_saves_name:
-        print(f"\nProcessing {index} of {total_files} collections ({display_name})")
-    
-    # Get known private videos if skip_private is True
-    known_private_urls = set()
-    if skip_private and os.path.exists(error_file_path):
-        with open(error_file_path, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line.endswith(" (private)"):
-                    known_private_urls.add(line[:-10])  # Remove " (private)" suffix
-    
-    # Create sets for faster membership testing and filter out private URLs if skip_private is True
-    downloaded_urls = {url for url in urls if file_handler.is_url_downloaded(url, collection_name)}
-    remaining_urls = urls - downloaded_urls
-    if skip_private:
-        remaining_urls = remaining_urls - known_private_urls
+        if os.path.basename(file_path) != file_handler.all_saves_name:
+            print(f"\nProcessing {index} of {total_files} collections ({display_name})")
+        
+        # Get known private videos if skip_private is True
+        known_private_urls = set()
+        if skip_private and os.path.exists(error_file_path):
+            with open(error_file_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.endswith(" (private)"):
+                        known_private_urls.add(line[:-10])  # Remove " (private)" suffix
+        
+        # Create sets for faster membership testing and filter out private URLs if skip_private is True
+        downloaded_urls = {url for url in urls if file_handler.is_url_downloaded(url, collection_name)}
+        remaining_urls = urls - downloaded_urls
+        if skip_private:
+            remaining_urls = remaining_urls - known_private_urls
 
-    # Report already downloaded URLs
-    if downloaded_urls:
-        print("\nSkipping already downloaded content:")
-        for idx, url in enumerate(sorted(downloaded_urls), 1):
-            is_photo = '/photo/' in url
-            print(f"\t{idx}. {url} {'[Photo]' if is_photo else '[Video]'}")
-    
-    # Report skipped private videos
-    if skip_private and known_private_urls:
-        print("\nSkipping known private content:")
-        for idx, url in enumerate(sorted(known_private_urls), 1):
-            print(f"\t{idx}. {url}")
-    
-    # Separate remaining URLs into photos and videos using sets
-    photo_urls = {url for url in remaining_urls if "/photo/" in url}
-    video_urls = remaining_urls - photo_urls
-    
-    # Process all videos first
-    if video_urls:
-        print("\nProcessing all videos:")
-        BATCH_SIZE = yt_dlp_handler.max_concurrent
-        video_urls_list = sorted(list(video_urls))  # Convert set to sorted list
-        for i in range(0, len(video_urls_list), BATCH_SIZE):
-            batch = video_urls_list[i:i + BATCH_SIZE]
-            current_batch = i//BATCH_SIZE + 1
-            total_batches = (len(video_urls_list) + BATCH_SIZE - 1)//BATCH_SIZE
-            print(f"\n\tVideo Batch {current_batch:,} of {total_batches:,}:")
+        # Report already downloaded URLs
+        if downloaded_urls:
+            print("\nSkipping already downloaded content:")
+            for idx, url in enumerate(sorted(downloaded_urls), 1):
+                is_photo = '/photo/' in url
+                print(f"\t{idx}. {url} {'[Photo]' if is_photo else '[Video]'}")
+        
+        # Report skipped private videos
+        if skip_private and known_private_urls:
+            print("\nSkipping known private content:")
+            for idx, url in enumerate(sorted(known_private_urls), 1):
+                print(f"\t{idx}. {url}")
+        
+        # Separate remaining URLs into photos and videos using sets
+        photo_urls = {url for url in remaining_urls if "/photo/" in url}
+        video_urls = remaining_urls - photo_urls
+        
+        # First process all videos in batches
+        if video_urls:
+            print(f"\nProcessing {len(video_urls)} videos:")
             
-            # Show what's being processed
-            for idx, url in enumerate(batch, 1):
-                print(f"\t  {idx}. {url}")
+            # Convert set to list for batch processing
+            video_urls_list = sorted(list(video_urls))
             
-            # Process video URLs with yt-dlp in parallel
-            try:
-                results = yt_dlp_handler.process_url_batch(batch, output_folder)
+            # Process in batches using yt_dlp_handler's max_concurrent setting
+            batch_size = yt_dlp_handler.max_concurrent
+            for i in range(0, len(video_urls_list), batch_size):
+                batch = video_urls_list[i:i + batch_size]
+                print(f"\nBatch {(i//batch_size)+1} of {(len(video_urls_list)-1)//batch_size + 1}:")
                 
-                # Handle results - only show errors/issues
-                for url, (success, error_msg) in results.items():
-                    if error_msg == "private":
-                        print(f"\t  ❌\tPrivate video: {url}")
-                        file_handler.log_error(url, error_file_path, is_private=True)
-                    elif error_msg in yt_dlp_handler.all_error_types:
-                        print(f"\t  ⚠️\t{error_msg}, using Selenium: {url}")
-                        try:
-                            selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
-                        except Exception as e:
-                            if str(e) == "private":
-                                print(f"\t  ❌\tPrivate video: {url}")
-                                file_handler.log_error(url, error_file_path, is_private=True)
-                            else:
-                                print(f"\t  ❌\tSelenium failed: {str(e)}")
-                                file_handler.log_error(url, error_file_path)
-                    elif not success:
-                        print(f"\t  ⚠️\tyt-dlp failed ({error_msg}), using Selenium: {url}")
-                        try:
-                            selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
-                        except Exception as e:
-                            if str(e) == "private":
-                                print(f"\t  ❌\tPrivate video: {url}")
-                                file_handler.log_error(url, error_file_path, is_private=True)
-                            else:
-                                print(f"\t  ❌\tSelenium failed: {str(e)}")
-                                file_handler.log_error(url, error_file_path)
-                    else:
-                        file_handler.log_successful_download(url, collection_name)
-            except Exception as e:
-                print(f"\t  ❌\tBatch processing failed: {str(e)}")
-                # Log errors for all URLs in the batch that haven't been handled
-                for url in batch:
-                    if not file_handler.is_url_downloaded(url):
-                        file_handler.log_error(url, error_file_path)
-    
-    # Then process all photos
-    if photo_urls:
-        print("\nProcessing all photos:")
-        for idx, url in enumerate(photo_urls, 1):
-            print(f"\tPhoto {idx} of {len(photo_urls)}: {url}")
-            try:
-                selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
-                file_handler.log_successful_download(url, collection_name)
-            except Exception as e:
-                if str(e) == "private":
-                    print(f"\t  ❌\tPrivate photo: {url}")
-                    file_handler.log_error(url, error_file_path, is_private=True)
-                else:
-                    print(f"\t  ❌\tPhoto download failed: {str(e)}")
-                    file_handler.log_error(url, error_file_path)
+                # Show what's being processed
+                for idx, url in enumerate(batch, 1):
+                    print(f"\t{idx}. {url}")
+                
+                try:
+                    # Process batch with yt-dlp
+                    results = yt_dlp_handler.process_url_batch(batch, output_folder)
+                    
+                    # Handle results
+                    for url, (success, error_msg) in results.items():
+                        if success:
+                            file_handler.log_successful_download(url, collection_name)
+                        else:
+                            # Queue failed downloads for selenium processing with error message
+                            queue_selenium_download(url, collection_name, error_msg)
+                except Exception as e:
+                    print(f"\t  ❌\tBatch processing failed: {str(e)}")
+                    # Queue all unhandled URLs in the batch for selenium processing
+                    for url in batch:
+                        if not file_handler.is_url_downloaded(url):
+                            queue_selenium_download(url, collection_name, str(e))
+        
+        # Then process all photos
+        if photo_urls:
+            print("\nProcessing all photos:")
+            for idx, url in enumerate(photo_urls, 1):
+                print(f"\tPhoto {idx} of {len(photo_urls)}: {url}")
+                # Queue photo downloads for selenium processing
+                queue_selenium_download(url, collection_name, "photo")
+                
+        # Wait for all selenium downloads to complete before returning
+        print("\nWaiting for queued downloads to complete...")
+        wait_for_selenium_queue()
+        
+    except Exception as e:
+        print(f"Error processing file: {str(e)}")
+        raise
 
     # After processing all URLs, queue the folder for syncing
     if os.path.isdir(output_folder) and not skip_sync:

@@ -9,7 +9,7 @@ from downloader.sync_handler import SyncHandler
 from downloader.validator import Validator
 from downloader.utils import (get_highest_group_number, write_and_process_urls, 
                             split_into_groups, print_final_summary)
-from downloader.file_processor import process_file, process_error_logs
+from downloader.file_processor import process_file, process_error_logs, stop_selenium_thread
 import subprocess
 
 
@@ -212,6 +212,11 @@ def main():
     finally:
         # Ensure sync thread is stopped
         sync_handler.stop_sync_thread()
+        
+        # Stop selenium worker thread
+        stop_selenium_thread()
+        
+        # Shutdown handlers
         selenium_handler.shutdown()
         yt_dlp_handler.shutdown()  # Clean up thread pool
         

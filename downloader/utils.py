@@ -452,3 +452,47 @@ def print_final_summary(input_path, file_handler):
         print("Here's where you can find the download buttons:")
         print("https://imgur.com/a/wRT1Zaw")
     
+def split_urls_by_type(urls):
+    """
+    Split URLs into video and photo URLs.
+    
+    Args:
+        urls: Iterable of URLs to split
+        
+    Returns:
+        tuple: (video_urls, photo_urls) where each is a set of URLs
+    """
+    photo_urls = {url for url in urls if "/photo/" in url}
+    video_urls = {url for url in urls if url not in photo_urls}
+    return video_urls, photo_urls
+
+def get_output_folder(file_path):
+    """
+    Get the output folder path for a given input file.
+    
+    Args:
+        file_path: Path to input file
+        
+    Returns:
+        str: Path to output folder
+    """
+    # Get collection name from file name, handling multiple extensions
+    base_name = os.path.basename(file_path)
+    collection_name = base_name.split('.txt')[0]
+    while collection_name.endswith('.'):
+        collection_name = collection_name[:-1]
+    return os.path.join(os.path.dirname(file_path), collection_name)
+
+def get_error_file_path(output_folder):
+    """
+    Get the error log file path for a given output folder.
+    
+    Args:
+        output_folder: Path to output folder
+        
+    Returns:
+        str: Path to error log file
+    """
+    collection_name = os.path.basename(output_folder)
+    return os.path.join(os.path.dirname(output_folder), f"[error log] {collection_name}.txt")
+    

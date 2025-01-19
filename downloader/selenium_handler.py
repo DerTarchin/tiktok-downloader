@@ -225,7 +225,7 @@ class SeleniumHandler:
                     url = f"https://www.tiktok.com/@/video/{video_id}/"
                 input_element.send_keys(url)
             except Exception as e:
-                print(f"\t-> Failed at: Finding and entering URL in input field")
+                print(f"\t-> Failed at: Finding and entering URL in input field for {url}")
                 print(f"\t-> Looking for element: ID 'link_url'")
                 raise Exception(f"Failed to find or interact with URL input field: {str(e)}")
 
@@ -503,10 +503,8 @@ class SeleniumHandler:
                             key=lambda f: os.path.getmtime(os.path.join(self.temp_download_dir, f))
                         )
                         downloaded_file = os.path.join(self.temp_download_dir, latest_file)
-                        print(f"Selected most recent file: {latest_file}")
                         
                         # Check if file is empty before processing
-                        print("Checking file size and waiting for download completion...")
                         self._check_file_size_with_retries(downloaded_file)
                         
                         print("Processing downloaded photo file...")
@@ -516,7 +514,7 @@ class SeleniumHandler:
                 
             raise Exception(f"No download started after {MAX_WAIT_TIME_SHORT} seconds")
         except Exception as e:
-            print(f"\t-> Failed at: Photo download process")
+            print(f"\t-> Failed at: Photo download process for {url}")
             raise
 
     def _handle_video_download(self, url, output_folder, video_id_suffix):
@@ -593,7 +591,7 @@ class SeleniumHandler:
             if str(e) == "private":
                 raise Exception("private")
             elif "href attribute is empty" not in str(e):
-                print(f"\t-> Failed at: Video download process")
+                print(f"\t-> Failed at: Video download process for {url}")
                 print(f"\t-> Looking for element: CSS 'a[data-event=\"hd_download_click\"]'")
             raise
 
@@ -684,7 +682,6 @@ class SeleniumHandler:
                 if not current_part_files and not base_name.endswith('.part'):
                     current_size = os.path.getsize(file_path)
                     if current_size > 0:
-                        print(f"File has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
                         return True
                 else:
                     # Check size of part file
