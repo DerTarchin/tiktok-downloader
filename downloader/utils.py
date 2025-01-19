@@ -96,7 +96,8 @@ def get_highest_group_number(input_path, all_saves_name):
     return highest_group
 
 def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_handler, 
-                         yt_dlp_handler, sync_handler, group_num=None, total_files=None, skip_private=False):
+                          yt_dlp_handler, sync_handler, group_num=None, total_files=None, 
+                          skip_private=False, skip_sync=False):
     """
     Write URLs to file and process them.
     
@@ -110,6 +111,7 @@ def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_hand
         group_num: Optional group number for progress display
         total_files: Optional total number of files for progress display
         skip_private: Whether to skip known private videos
+        skip_sync: Whether to skip syncing the processed folder
     """
     # Get existing URLs if file exists
     existing_urls = []
@@ -135,10 +137,12 @@ def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_hand
                 from .file_processor import process_file
                 if group_num is not None:
                     process_file(output_file, group_num, total_files,
-                              file_handler, selenium_handler, yt_dlp_handler, sync_handler, skip_private=skip_private)
+                              file_handler, selenium_handler, yt_dlp_handler, sync_handler, 
+                              skip_private=skip_private, skip_sync=skip_sync)
                 else:
                     process_file(output_file, total_files, total_files,
-                              file_handler, selenium_handler, yt_dlp_handler, sync_handler, skip_private=skip_private)
+                              file_handler, selenium_handler, yt_dlp_handler, sync_handler, 
+                              skip_private=skip_private, skip_sync=skip_sync)
                 break  # Success - exit retry loop
                 
             except Exception as e:

@@ -15,7 +15,7 @@ class YtDlpHandler:
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent)
         self.download_queue = Queue()
         self.result_lock = Lock()
-        self.all_error_types = ["private", "rate limited", "network", "audio only", "not video file"]
+        self.all_error_types = ["private", "rate limited", "network", "audio only", "not video file", "vpn blocked"]
         
     def try_yt_dlp(self, url, output_folder):
         """
@@ -57,6 +57,10 @@ class YtDlpHandler:
             elif "Unable to extract video data" in stderr:
                 return False, "private", 0.0  # Often means video was deleted or made private
             elif "Unable to download webpage" in stderr:
+                if "HTTP Error 403: Forbidden" in stderr:
+                    # VPN IP has been blocked
+                    input("\n>> Network error disconnected, press enter to continue...")
+                    return False, "vpn blocked", 0.0
                 return False, "network", 0.0  # Network connectivity issues
             elif "HTTP Error 429" in stderr:
                 return False, "rate limited", 0.0  # Rate limiting
@@ -106,6 +110,10 @@ class YtDlpHandler:
             
             if "HTTP Error 429" in stderr:
                 return False, "rate limited", 0.0
+            elif "HTTP Error 403: Forbidden" in stderr:
+                # VPN IP has been blocked
+                input("\n>> Network error disconnected, press enter to continue...")
+                return False, "vpn blocked", 0.0
             elif any(msg in stderr for msg in ["Video not available", "This video is private", "Video unavailable", "Unable to extract video data"]):
                 return False, "private", 0.0
             
@@ -115,6 +123,10 @@ class YtDlpHandler:
             error_str = str(e)
             if "429" in error_str:
                 return False, "rate limited", 0.0
+            elif "403" in error_str:
+                # VPN IP has been blocked
+                input("\n>> Network error disconnected, press enter to continue...")
+                return False, "vpn blocked", 0.0
             elif any(msg in error_str for msg in ["connection", "timeout", "network"]):
                 return False, "network", 0.0
             return False, str(e), 0.0

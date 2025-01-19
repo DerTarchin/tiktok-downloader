@@ -256,10 +256,12 @@ class SyncHandler:
             "rclone", "copy",  # Using copy instead of sync to preserve remote folders
             escaped_input_path,
             escaped_remote_path,
+            "--filter", '"+ */"',  # Include all folders
             "--filter", '"+ *.txt"',  # Only sync text files and logs
             "--filter", '"+ *.log"',
             "--filter", '"- geckodriver.log"',  # Exclude geckodriver.log specifically
-            "--filter", '"- *"',  # Exclude everything else
+            "--filter", '"- .DS_Store"',  # Exclude .DS_Store files
+            "-v"
         ] + self.rclone_modifiers
         
         cmd_str = " ".join(cmd)

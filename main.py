@@ -16,7 +16,7 @@ import subprocess
 def main():
     # Check for correct usage
     if len(sys.argv) < 2:
-        print("Usage: python script.py <input_directory_or_file> [--errors-only] [--disable-headless] [--combine-uncategorized] [--concurrent N] [--skip-validation] [--skip-private]")
+        print("Usage: python script.py <input_directory_or_file> [--errors-only] [--disable-headless] [--combine-uncategorized] [--concurrent N] [--skip-validation] [--skip-private] [--skip-sync]")
         sys.exit(1)
 
     # Get the input path and check for flags
@@ -26,6 +26,7 @@ def main():
     headless = "--disable-headless" not in sys.argv
     skip_validation = "--skip-validation" in sys.argv
     skip_private = "--skip-private" in sys.argv
+    skip_sync = "--skip-sync" in sys.argv
     
     # Parse concurrent downloads setting
     concurrent_downloads = 5 # default concurrent
@@ -59,14 +60,16 @@ def main():
     
     try:
         selenium_handler.startup()
-        sync_handler.start_sync_thread()
+        if not skip_sync:
+            sync_handler.start_sync_thread()
 
         if errors_only:
             print("\nRunning in errors-only mode...")
             process_error_logs(input_path if os.path.isdir(input_path) 
                              else os.path.dirname(input_path),
                              file_handler, selenium_handler, 
-                             yt_dlp_handler, sync_handler)
+                             yt_dlp_handler, sync_handler,
+                             skip_sync=skip_sync)
         else:
             # Track all processed URLs
             processed_urls = set()
@@ -134,7 +137,8 @@ def main():
                         process_file(file_path, index, total_files,
                                   file_handler, selenium_handler, 
                                   yt_dlp_handler, sync_handler,
-                                  skip_private=skip_private)
+                                  skip_private=skip_private,
+                                  skip_sync=skip_sync)
 
                 # Finally, process the uncategorized groups if they were created
                 if group_files:
@@ -145,7 +149,8 @@ def main():
                                   total_files,
                                   file_handler, selenium_handler,
                                   yt_dlp_handler, sync_handler,
-                                  skip_private=skip_private)
+                                  skip_private=skip_private,
+                                  skip_sync=skip_sync)
                 elif os.path.exists(all_saves_path) and combine_uncategorized:
                     # Original behavior for non-split processing
                     remaining_uncategorized = os.path.join(input_path, 
@@ -154,7 +159,8 @@ def main():
                                         file_handler, selenium_handler,
                                         yt_dlp_handler, sync_handler,
                                         None, total_files,
-                                        skip_private=skip_private)
+                                        skip_private=skip_private,
+                                        skip_sync=skip_sync)
 
             elif os.path.isfile(input_path):
                 # If it's a single file, process it directly
@@ -162,32 +168,36 @@ def main():
                     process_file(input_path, 1, 1,
                               file_handler, selenium_handler,
                               yt_dlp_handler, sync_handler,
-                              skip_private=skip_private)
+                              skip_private=skip_private,
+                              skip_sync=skip_sync)
                 else:
                     print(f"File {input_path} is not a .txt file. Skipping.")
             else:
                 print(f"Path {input_path} does not exist.")
 
             # After all regular processing, wait for sync queue to empty
-            print("\n>> Waiting for background syncs to complete...")
-            sync_handler.wait_for_syncs()
+            if not skip_sync:
+                print("\n>> Waiting for background syncs to complete...")
+                sync_handler.wait_for_syncs()
             
             # Process error logs
             process_error_logs(input_path if os.path.isdir(input_path) 
                              else os.path.dirname(input_path),
                              file_handler, selenium_handler,
-                             yt_dlp_handler, sync_handler)
+                             yt_dlp_handler, sync_handler,
+                             skip_sync=skip_sync)
             
             # Wait for all syncs to complete
-            print("\n>> Waiting for all syncs to complete...")
-            sync_handler.wait_for_syncs()
-            
-            # Stop the sync thread
-            sync_handler.stop_sync_thread()
-            
-            print("\n>> Performing final sync of remaining files...")
-            sync_handler.sync_remaining_files(input_path if os.path.isdir(input_path) 
-                                           else os.path.dirname(input_path))
+            if not skip_sync:
+                print("\n>> Waiting for all syncs to complete...")
+                sync_handler.wait_for_syncs()
+                
+                # Stop the sync thread
+                sync_handler.stop_sync_thread()
+                
+                print("\n>> Performing final sync of remaining files...")
+                sync_handler.sync_remaining_files(input_path if os.path.isdir(input_path) 
+                                               else os.path.dirname(input_path))
             
             
     except KeyboardInterrupt:

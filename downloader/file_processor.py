@@ -4,7 +4,7 @@ import os
 from .utils import extract_video_id
 
 def process_file(file_path, index, total_files, file_handler, selenium_handler, 
-                yt_dlp_handler, sync_handler, skip_private=False):
+                yt_dlp_handler, sync_handler, skip_private=False, skip_sync=False):
     """
     Process a single text file containing URLs to download.
     
@@ -17,6 +17,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         yt_dlp_handler: YtDlpHandler instance
         sync_handler: SyncHandler instance
         skip_private: Whether to skip known private videos
+        skip_sync: Whether to skip syncing the processed folder
     """
 
     # Get collection name from file name, handling multiple extensions
@@ -150,13 +151,13 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                     file_handler.log_error(url, error_file_path)
 
     # After processing all URLs, queue the folder for syncing
-    if os.path.isdir(output_folder):
+    if os.path.isdir(output_folder) and not skip_sync:
         username = os.path.basename(os.path.dirname(file_path))
         sync_handler.queue_sync(output_folder, username)
         print(f">> Queued for background sync: {os.path.basename(output_folder)}")
 
 def process_error_logs(input_path, file_handler, selenium_handler, 
-                      yt_dlp_handler, sync_handler):
+                      yt_dlp_handler, sync_handler, skip_sync=False):
     """
     Process error log files and retry failed downloads.
     
@@ -166,6 +167,7 @@ def process_error_logs(input_path, file_handler, selenium_handler,
         selenium_handler: SeleniumHandler instance
         yt_dlp_handler: YtDlpHandler instance
         sync_handler: SyncHandler instance
+        skip_sync: Whether to skip syncing the processed folder
     """
     print("\nProcessing error logs...")
     error_files = [f for f in os.listdir(input_path) 
@@ -264,11 +266,11 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                 file_handler.log_successful_download(url, original_collection_name)
         
         # If we had any successes, queue the folder for sync immediately
-        if had_success:
+        if had_success and not skip_sync:
             username = os.path.basename(input_path)
             sync_handler.queue_sync(output_folder, username)
             print(f">> Queued for background sync: {os.path.basename(output_folder)}")
-        else:
+        elif not skip_sync:
             # If no successes and folder is empty, remove it
             if os.path.exists(output_folder) and not os.listdir(output_folder):
                 try:

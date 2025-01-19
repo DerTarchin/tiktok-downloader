@@ -105,7 +105,7 @@ python main.py path/to/directory --errors-only
 # Disable headless mode (show browser)
 python main.py path/to/directory --disable-headless
 
-# Control concurrent downloads (default: 3, max: 5)
+# Control concurrent downloads (default: 5, max: 5)
 python main.py path/to/directory --concurrent 4
 
 # Skip download validation step
@@ -240,6 +240,9 @@ python scripts/download_tiktok_audio.py input_file.txt
 
 # Download audio files (saves to Sounds directory)
 python scripts/download_tiktok_audio.py input_file.txt --download
+
+# Control number of concurrent downloads (default: 5)
+python scripts/download_tiktok_audio.py input_file.txt --download --concurrent 3
 ```
 
 The script will:
@@ -247,10 +250,21 @@ The script will:
 - Extract TikTok sound links from the input file
 - Save extracted links to links.txt in the same directory as input file
 - Create a Sounds directory in the same location as input file
-- Optionally download audio files using musicaldown.com
-- Save audio files in MP3 format in the Sounds directory
-- Show progress for each processed link
+- When downloading:
+  - Use concurrent downloads for better performance (default: 5 concurrent)
+  - Save files in format: "original_name music_id.mp3" (limited to 70 chars)
+  - Track successful and failed downloads in real-time
+  - Remove successful downloads from failed log automatically
+  - Skip already downloaded files
+  - Validate files after download
+  - Show detailed progress and statistics
 - Handle errors gracefully with detailed logging
+- Provide a final summary with:
+  - Successfully downloaded files this session
+  - Total successful downloads
+  - Actual files in directory
+  - Failed downloads
+  - Any mismatches or validation issues
 
 ### remove_group_duplicates.py
 
@@ -330,14 +344,37 @@ python scripts/rename_hidden_files.py path/to/directory
 
 # Show what would be done without making changes
 python scripts/rename_hidden_files.py path/to/directory --dry-run
+
+# Also handle files in Google Drive
+python scripts/rename_hidden_files.py path/to/directory --handle-remote
 ```
 
 The script will:
 
 - Find all files starting with a dot (except .DS_Store)
-- Rename them to remove the leading dot
-- Handle both local and remote (Google Drive) files
+- Rename them to start with underscore instead
+- Handle both local and remote (Google Drive) files if requested
 - Show progress and statistics
+
+### count_unique_videos.py
+
+A utility script to count unique videos across all collections in a directory.
+
+```bash
+# Count unique videos in a directory
+python scripts/count_unique_videos.py path/to/directory
+
+# Show detailed breakdown
+python scripts/count_unique_videos.py path/to/directory --verbose
+```
+
+The script will:
+
+- Process all .txt files in the directory
+- Count total unique video URLs
+- Show breakdown by collection if verbose
+- Identify duplicates across collections
+- Display summary statistics
 
 ### split_links.py
 
@@ -372,41 +409,59 @@ python scripts/remove_extensionless_files.py username --dry-run
 
 ### extract_post_links.py
 
-A utility script to extract TikTok video links from text files containing TikTok metadata and optionally download videos from tiktokv.us URLs. The script saves the extracted links in the same directory as the input file.
-
-#### Usage
+A utility script to extract TikTok video links from text files containing TikTok metadata and optionally download videos from tiktokv.us URLs.
 
 ```bash
-python3 scripts/extract_post_links.py input_file1.txt [input_file2.txt ...] [-o custom_name.txt] [--download]
-```
+# Extract links from a single file (creates links.txt)
+python scripts/extract_post_links.py metadata.txt
 
-##### Arguments:
+# Extract links from multiple files
+python scripts/extract_post_links.py file1.txt file2.txt file3.txt
 
-- `input_files`: One or more text files containing TikTok metadata
-- `-o, --output`: Optional output filename for links (default: links.txt)
-- `--download`: Download videos from any tiktokv.us URLs found in the files
-
-##### Example:
-
-```bash
-# Process a single file (creates links.txt in same directory)
-python3 scripts/extract_post_links.py metadata.txt
-
-# Process multiple files (creates links.txt for each input file)
-python3 scripts/extract_post_links.py file1.txt file2.txt file3.txt
-
-# Specify custom output filename
-python3 scripts/extract_post_links.py metadata.txt -o my_links.txt
+# Save links to custom filename
+python scripts/extract_post_links.py metadata.txt -o my_links.txt
 
 # Extract links and download videos
-python3 scripts/extract_post_links.py metadata.txt --download
+python scripts/extract_post_links.py metadata.txt --download
 ```
 
 The script will:
 
-1. Extract all TikTok links from each input file and save them to a links.txt file (or specified filename) in the same directory as the input file
-2. If `--download` is specified:
-   - Create a directory named after the input file (without extension)
-   - Download videos from any tiktokv.us URLs found
+1. Extract TikTok links:
+
+   - Process each input file
+   - Save links to links.txt (or specified filename)
+   - Create separate output for each input file
+   - Handle multiple input files
+
+2. If --download is specified:
+   - Create directory named after input file
+   - Download videos from tiktokv.us URLs
    - Save videos as "Video 1.mp4", "Video 2.mp4", etc.
-   - Skip any non-tiktokv.us URLs
+   - Skip non-tiktokv.us URLs
+
+### sync_to_remote.py
+
+A utility script to sync a directory to Google Drive using the same logic as the main script's final sync. Handles both video folders and text/log files.
+
+```bash
+# Sync current directory
+python scripts/sync_to_remote.py
+
+# Sync specific directory
+python scripts/sync_to_remote.py --path /path/to/dir
+
+# Preview what would be synced without actually syncing
+python scripts/sync_to_remote.py --dry-run
+
+# Use different remote base path
+python scripts/sync_to_remote.py --gdrive-base "gdrive:/My Archives"
+```
+
+The script will:
+
+1. Sync all folders that correspond to .txt files
+2. Handle files starting with periods or spaces
+3. Skip empty folders
+4. Sync text files and logs
+5. Use optimal rclone settings (20 transfers, 256M chunks)
