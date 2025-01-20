@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import shutil
+import time
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -94,6 +95,24 @@ def move_videos_batch(moves, is_remote=False, batch_size=40):
     # Process each directory pair
     for (src_dir, dest_dir), file_moves in dir_moves.items():
         print(f"\nMoving {len(file_moves)} files from:\n{src_dir}\nto:\n{dest_dir}")
+        for filename, _ in file_moves:
+            print(f"\t{filename}")
+        
+        # First verify files exist by getting directory listing once
+        print("\nVerifying source files exist...")
+        cmd = ["rclone", "lsf", src_dir]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            existing_files = set(result.stdout.splitlines())
+            missing_files = []
+            for filename, _ in file_moves:
+                if filename not in existing_files:
+                    print(f"! Warning: Source file not found: {filename}")
+                    missing_files.append(filename)
+            if missing_files:
+                print(f"\nFound {len(missing_files)} missing files out of {len(file_moves)} total files")
+        else:
+            print("! Warning: Could not list source directory contents")
         
         # Create a temporary file with the list of files to move
         import tempfile
@@ -106,16 +125,25 @@ def move_videos_batch(moves, is_remote=False, batch_size=40):
             # Use rclone move with --files-from
             cmd = ["rclone", "move", "--files-from", temp_file_path, src_dir, dest_dir]
             result = subprocess.run(cmd, capture_output=True, text=True)
-            success = result.returncode == 0
             
-            if success:
-                print(f"✓ Successfully moved {len(file_moves)} files")
-                for _, video_id in file_moves:
+            # Check if any files were actually transferred
+            cmd_check = ["rclone", "lsf", dest_dir]
+            result_check = subprocess.run(cmd_check, capture_output=True, text=True)
+            dest_files = set(result_check.stdout.splitlines())
+            
+            files_moved = False
+            for filename, video_id in file_moves:
+                if filename in dest_files:
                     results[video_id] = True
+                    files_moved = True
+                else:
+                    results[video_id] = False
+            
+            if files_moved:
+                print(f"✓ Successfully moved files")
             else:
-                print(f"✗ Batch move failed, error output:")
-                print(result.stderr)
-                # If batch move fails, try individual moves as fallback
+                print(f"✗ No files were moved")
+                # Try individual moves as fallback
                 print("Attempting individual moves as fallback...")
                 for filename, video_id in file_moves:
                     src_path = os.path.join(src_dir, filename)
@@ -125,7 +153,11 @@ def move_videos_batch(moves, is_remote=False, batch_size=40):
                     escaped_dest = dest_path.replace("[", "\\[").replace("]", "\\]").replace("{", "\\{").replace("}", "\\}")
                     cmd = ["rclone", "moveto", escaped_src, escaped_dest]
                     result = subprocess.run(cmd, capture_output=True, text=True)
-                    success = result.returncode == 0
+                    
+                    # Verify if file was actually moved
+                    cmd_check = ["rclone", "lsf", escaped_dest]
+                    result_check = subprocess.run(cmd_check, capture_output=True, text=True)
+                    success = result.returncode == 0 and result_check.stdout.strip() != ""
                     results[video_id] = success
                     print(f"{'✓' if success else '✗'} Individual move {'succeeded' if success else 'failed'} for {filename}")
         finally:

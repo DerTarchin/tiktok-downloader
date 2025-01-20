@@ -441,17 +441,6 @@ def print_final_summary(input_path, file_handler):
     with open(summary_path, 'w') as f:
         f.write(summary_text)
     
-    print("\n --- message template --- \n")
-    print("Great news! Your videos are ready 😊🎉")
-    # ADD SUMMARY HERE
-    print("Here's the temporary link to them in google drive:")
-    print("\n --- LINK HERE --- \n")
-    print("You can download them from there and save them to your computer. Please do so as soon as you can, and let me know when you're done, because i'd like to have that space available again to help other TikTokers")
-    if size_value > 3:
-        print("And i suggest you download folder-by-folder instead of downloading the entire archive at once, because it's easier to manage smaller downloads at a time")
-        print("Here's where you can find the download buttons:")
-        print("https://imgur.com/a/wRT1Zaw")
-    
 def split_urls_by_type(urls):
     """
     Split URLs into video and photo URLs.

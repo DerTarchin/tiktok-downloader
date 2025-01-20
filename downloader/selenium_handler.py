@@ -725,7 +725,6 @@ class SeleniumHandler:
                 if current_size != last_size:
                     last_size = current_size
                     last_size_change = time.time()
-                    print(f"File {part_file} is downloading, current size: {current_size / 1_000_000:.2f} MB")
                 elif time.time() - last_size_change > MAX_WAIT_TIME_SHORT:
                     raise Exception(f"Download stalled - no file size changes for {MAX_WAIT_TIME_SHORT} seconds. Last size: {last_size / 1_000_000:.2f} MB")
                 
