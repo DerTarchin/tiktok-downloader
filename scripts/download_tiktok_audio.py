@@ -102,6 +102,10 @@ def format_filename(original_filename, music_id):
     # Limit base name to 70 chars
     base_name = base_name[:70].rstrip()
     
+    # Prefix with underscore if base name starts with a period
+    if base_name.startswith('.'):
+        base_name = f"_{base_name}"
+    
     # Create new filename
     return f"{base_name} {music_id}{ext}"
 

@@ -17,6 +17,12 @@ class YtDlpHandler:
         self.result_lock = Lock()
         self.all_error_types = ["private", "rate limited", "network", "audio only", "not video file", "vpn blocked"]
         
+        # Add counters for VPN blocks and successful downloads
+        self.vpn_block_count = 0
+        self.successful_download_count = 0
+        self.vpn_block_threshold = 5  # Ask for user input after this many consecutive blocks
+        self.success_reset_threshold = 10  # Reset VPN block count after this many consecutive successes
+        
     def try_yt_dlp(self, url, output_folder):
         """
         Attempt to download using yt-dlp.
@@ -59,7 +65,15 @@ class YtDlpHandler:
             elif "Unable to download webpage" in stderr:
                 if "HTTP Error 403: Forbidden" in stderr:
                     # VPN IP has been blocked
-                    input("\n>> Network error disconnected, press enter to continue...")
+                    self.vpn_block_count += 1
+                    self.successful_download_count = 0  # Reset success counter
+                    
+                    if self.vpn_block_count >= self.vpn_block_threshold:
+                        input("\n>> Network error disconnected, press enter to continue...")
+                        self.vpn_block_count = 0  # Reset block counter after user input
+                    else:
+                        print(f"\n>> VPN block detected ({self.vpn_block_count}/{self.vpn_block_threshold})")
+                        
                     return False, "vpn blocked", 0.0
                 return False, "network", 0.0  # Network connectivity issues
             elif "HTTP Error 429" in stderr:
@@ -106,13 +120,30 @@ class YtDlpHandler:
                             download_speed = float(speed_str)
                         except (IndexError, ValueError):
                             pass
+                
+                # Increment successful download counter and check if we should reset VPN block count
+                self.successful_download_count += 1
+                if self.successful_download_count >= self.success_reset_threshold:
+                    if self.vpn_block_count > 0:
+                        print(f"\n>> Resetting VPN block counter after {self.success_reset_threshold} successful downloads")
+                    self.vpn_block_count = 0
+                    self.successful_download_count = 0
+                
                 return True, None, download_speed
             
             if "HTTP Error 429" in stderr:
                 return False, "rate limited", 0.0
             elif "HTTP Error 403: Forbidden" in stderr:
                 # VPN IP has been blocked
-                input("\n>> Network error disconnected, press enter to continue...")
+                self.vpn_block_count += 1
+                self.successful_download_count = 0  # Reset success counter
+                
+                if self.vpn_block_count >= self.vpn_block_threshold:
+                    input("\n>> Network error disconnected, press enter to continue...")
+                    self.vpn_block_count = 0  # Reset block counter after user input
+                else:
+                    print(f"\n>> VPN block detected ({self.vpn_block_count}/{self.vpn_block_threshold})")
+                    
                 return False, "vpn blocked", 0.0
             elif any(msg in stderr for msg in ["Video not available", "This video is private", "Video unavailable", "Unable to extract video data"]):
                 return False, "private", 0.0
@@ -125,7 +156,15 @@ class YtDlpHandler:
                 return False, "rate limited", 0.0
             elif "403" in error_str:
                 # VPN IP has been blocked
-                input("\n>> Network error disconnected, press enter to continue...")
+                self.vpn_block_count += 1
+                self.successful_download_count = 0  # Reset success counter
+                
+                if self.vpn_block_count >= self.vpn_block_threshold:
+                    input("\n>> Network error disconnected, press enter to continue...")
+                    self.vpn_block_count = 0  # Reset block counter after user input
+                else:
+                    print(f"\n>> VPN block detected ({self.vpn_block_count}/{self.vpn_block_threshold})")
+                    
                 return False, "vpn blocked", 0.0
             elif any(msg in error_str for msg in ["connection", "timeout", "network"]):
                 return False, "network", 0.0
