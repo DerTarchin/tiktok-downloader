@@ -82,67 +82,25 @@ def move_videos_batch(moves, is_remote=False, batch_size=40):
     print(f"\nProcessing {len(moves):,} moves in {total_batches:,} batches of up to {batch_size:,} files each...")
     
     # Process moves in batches
-    for batch_num, i in enumerate(range(0, len(moves), batch_size), 1):
+    for batch_num, i in enumerate(range(0, len(moves)), 1):
         batch_items = list(moves.items())[i:i + batch_size]
-        
-        # Separate files with special characters
-        special_chars = {'{', '[', '(', ')', '}', ']'}
-        normal_batch = []
-        special_batch = []
-        
-        for video_id, (src_path, dest_path) in batch_items:
-            filename = os.path.basename(src_path)
-            if any(char in filename for char in special_chars):
-                special_batch.append((video_id, (src_path, dest_path)))
-            else:
-                normal_batch.append((video_id, (src_path, dest_path)))
-        
         print(f"\nProcessing batch {batch_num:,}/{total_batches:,} ({len(batch_items):,} files)...")
         
-        # Process files with special characters individually
-        if special_batch:
-            print(f"\nProcessing {len(special_batch):,} files with special characters individually...")
-            for video_id, (src_path, dest_path) in special_batch:
-                print(f"Moving (special chars): {src_path}\n\t-> {dest_path}")
-                success = move_video(src_path, dest_path, video_id, is_remote=True)
-                results[video_id] = success
-                print(f"{'✓' if success else '✗'} Individual move {'succeeded' if success else 'failed'}")
-        
-        # Process remaining files in batch
-        if normal_batch:
-            print(f"\nProcessing {len(normal_batch):,} files in batch...")
+        # Process all files using individual moveto commands
+        for video_id, (src_path, dest_path) in batch_items:
+            print(f"Moving: {src_path}\n\t-> {dest_path}")
             
-            # Print individual file moves
-            for video_id, (src_path, dest_path) in normal_batch:
-                print(f"Moving: {src_path}\n\t-> {dest_path}")
+            # Escape special characters in paths for rclone
+            escaped_src = src_path.replace("[", "\\[").replace("]", "\\]").replace("{", "\\{").replace("}", "\\}")
+            escaped_dest = dest_path.replace("[", "\\[").replace("]", "\\]").replace("{", "\\{").replace("}", "\\}")
             
-            # Prepare rclone batch command
-            cmd = ["rclone", "move"]
-            for video_id, (src_path, dest_path) in normal_batch:
-                cmd.extend(["--include", os.path.basename(src_path)])
-            
-            first_src = os.path.dirname(normal_batch[0][1][0])
-            first_dest = os.path.dirname(normal_batch[0][1][1])
-            cmd.extend([first_src, first_dest])
-            
-            # Execute the batch move
+            cmd = ["rclone", "moveto", escaped_src, escaped_dest]
             result = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                print(f"✓ Batch {batch_num} completed successfully")
-                for video_id, _ in normal_batch:
-                    results[video_id] = True
-            else:
-                print(f"✗ Batch {batch_num} failed")
+            success = result.returncode == 0
+            results[video_id] = success
+            print(f"{'✓' if success else '✗'} Move {'succeeded' if success else 'failed'}")
+            if not success:
                 print("Error output:", result.stderr)
-                print("\nAttempting individual moves for failed batch...")
-                
-                # Try moving files individually
-                for video_id, (src_path, dest_path) in normal_batch:
-                    print(f"Attempting individual move: {src_path}")
-                    success = move_video(src_path, dest_path, video_id, is_remote=True)
-                    results[video_id] = success
-                    print(f"{'✓' if success else '✗'} Individual move {'succeeded' if success else 'failed'}")
     
     print(f"\nBatch processing complete. {sum(results.values()):,} successful, {len(results) - sum(results.values()):,} failed")
     return results
@@ -156,6 +114,8 @@ def main():
                       help='Show what would be done without making changes')
     parser.add_argument('--skip-move', action='store_true',
                       help='Skip moving videos to fix missing entries, just delete extras')
+    parser.add_argument('--delete-extra', action='store_true',
+                      help='Delete extra videos found in remote storage')
 
     args = parser.parse_args()
 
@@ -249,9 +209,14 @@ def main():
             if video_id in videos_to_move:  # Skip if we moved this video
                 continue
                 
+            if  not args.delete_extra:
+                print(f"Skipping extra video {video_id} from {collection} (use --delete-extra to delete)")
+                update_progress()
+                continue
+
             print(f"Deleting extra video {video_id} from {collection}")
-            is_remote = file_info.startswith('(remote)')
             filename = file_info.split(' ', 1)[1]  # Remove (local) or (remote) prefix
+            is_remote = file_info.startswith('(remote)')  # Define is_remote based on file_info prefix
             
             if is_remote:
                 path = f"{args.gdrive_base_path}/{os.path.basename(args.input_path)}/{collection}/{filename}"

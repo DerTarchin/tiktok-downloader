@@ -209,8 +209,13 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                         if success:
                             file_handler.log_successful_download(url, collection_name)
                         else:
-                            # Queue failed downloads for selenium processing with error message
-                            queue_selenium_download(url, collection_name, error_msg)
+                            # Skip selenium for private videos and just log them
+                            if error_msg == "private":
+                                print(f"\t  ❌\tPrivate video: {url}")
+                                file_handler.log_error(url, error_file_path, is_private=True)
+                            else:
+                                # Queue failed downloads for selenium processing with error message
+                                queue_selenium_download(url, collection_name, error_msg)
                 except Exception as e:
                     print(f"\t  ❌\tBatch processing failed: {str(e)}")
                     # Queue all unhandled URLs in the batch for selenium processing

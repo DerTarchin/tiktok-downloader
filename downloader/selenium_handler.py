@@ -384,6 +384,9 @@ class SeleniumHandler:
                     
                     download_path = os.path.join(output_folder, filename)
                     
+                    # Create output directory if it doesn't exist
+                    os.makedirs(os.path.dirname(download_path), exist_ok=True)
+                    
                     # Download using curl
                     cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
                     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -451,6 +454,9 @@ class SeleniumHandler:
                     
                     download_path = os.path.join(output_folder, filename)
                     
+                    # Create output directory if it doesn't exist
+                    os.makedirs(os.path.dirname(download_path), exist_ok=True)
+                    
                     # Download using curl
                     cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
                     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -508,13 +514,15 @@ class SeleniumHandler:
                         self._check_file_size_with_retries(downloaded_file)
                         
                         print("Processing downloaded photo file...")
-                        self._process_downloaded_photo_file(downloaded_file, url, output_folder, video_id_suffix)
-                        return
+                        if self._process_downloaded_photo_file(downloaded_file, url, output_folder, video_id_suffix):
+                            return  # Successfully processed, no need to try SnapTik
+                        raise Exception("Failed to process downloaded photo file")
                 time.sleep(0.5)
-                
+
             raise Exception(f"No download started after {MAX_WAIT_TIME_SHORT} seconds")
         except Exception as e:
             print(f"\t-> Failed at: Photo download process for {url}")
+            print(f"\t-> Error details: {str(e)}")
             raise
 
     def _handle_video_download(self, url, output_folder, video_id_suffix):
@@ -566,6 +574,9 @@ class SeleniumHandler:
             
             download_path = os.path.join(output_folder, filename)
             
+            # Create output directory if it doesn't exist
+            os.makedirs(os.path.dirname(download_path), exist_ok=True)
+            
             # Download using curl
             cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -608,39 +619,67 @@ class SeleniumHandler:
     def _process_downloaded_photo_file(self, downloaded_file, url, output_folder, video_id_suffix):
         """Process and rename downloaded file"""
         try:
-            title_element = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, 'title'))
-            )
-            title_text = title_element.get_attribute('innerHTML').split(" | Download Now!")[0]
-            if title_text == '\ufff6' or not title_text.strip():
-                title_text = ""
-        except:
-            print("Could not find title element, using URL-based name")
-            title_text = urlparse(url).path.split('/')[-1]
-
-        uploader = self.get_uploader_from_page(url)
-        suffix = video_id_suffix if title_text else extract_video_id(url)
-        filename = clean_filename(f"{(uploader+title_text)[:MAX_FILENAME_LENGTH]}{suffix}.mp4")
-        output_path = os.path.join(output_folder, filename)
-        
-        # Wait a brief moment to ensure file is completely downloaded
-        time.sleep(1)
-        try:
-            os.rename(downloaded_file, output_path)
+            # First verify the downloaded file exists and has content
+            if not os.path.exists(downloaded_file):
+                raise Exception("Downloaded file does not exist")
             
-            # Check if renamed file is empty with retries
-            self._check_file_size_with_retries(output_path)
-                
-        except OSError as e:
-            if "[Errno 92] Illegal byte sequence" in str(e):
-                simple_filename = clean_filename(f"{video_id_suffix.strip()}.mp4")
-                simple_output_path = os.path.join(output_folder, simple_filename)
-                os.rename(downloaded_file, simple_output_path)
+            file_size = os.path.getsize(downloaded_file)
+            if file_size == 0:
+                raise Exception("Downloaded file is empty")
+            
+            print(f"File has been successfully downloaded: {file_size / (1024*1024):.2f} MB")
+
+            try:
+                title_element = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, 'title'))
+                )
+                title_text = title_element.get_attribute('innerHTML').split(" | Download Now!")[0]
+                if title_text == '\ufff6' or not title_text.strip():
+                    title_text = ""
+            except:
+                print("Could not find title element, using URL-based name")
+                title_text = urlparse(url).path.split('/')[-1]
+
+            uploader = self.get_uploader_from_page(url)
+            suffix = video_id_suffix if title_text else extract_video_id(url)
+            filename = clean_filename(f"{(uploader+title_text)[:MAX_FILENAME_LENGTH]}{suffix}.mp4")
+            output_path = os.path.join(output_folder, filename)
+            
+            # Create output directory if it doesn't exist
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            # Wait a brief moment to ensure file is completely downloaded
+            time.sleep(1)
+            try:
+                os.rename(downloaded_file, output_path)
                 
                 # Check if renamed file is empty with retries
-                self._check_file_size_with_retries(simple_output_path)
-            else:
-                raise 
+                self._check_file_size_with_retries(output_path)
+                print(f"Successfully processed and renamed photo file to: {filename}")
+                return True
+                    
+            except OSError as e:
+                if "[Errno 92] Illegal byte sequence" in str(e):
+                    simple_filename = clean_filename(f"{video_id_suffix.strip()}.mp4")
+                    simple_output_path = os.path.join(output_folder, simple_filename)
+                    os.rename(downloaded_file, simple_output_path)
+                    
+                    # Check if renamed file is empty with retries
+                    self._check_file_size_with_retries(simple_output_path)
+                    print(f"Successfully processed and renamed photo file to: {simple_filename}")
+                    return True
+                else:
+                    raise
+                    
+        except Exception as e:
+            print(f"Error processing photo file: {str(e)}")
+            # Try to clean up the downloaded file if it exists
+            if os.path.exists(downloaded_file):
+                try:
+                    os.remove(downloaded_file)
+                except:
+                    pass
+            raise
 
     def _check_file_size_with_retries(self, file_path, max_retries=10, retry_delay=0.5):
         """
