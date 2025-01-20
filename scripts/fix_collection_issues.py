@@ -81,26 +81,56 @@ def move_videos_batch(moves, is_remote=False, batch_size=40):
     
     print(f"\nProcessing {len(moves):,} moves in {total_batches:,} batches of up to {batch_size:,} files each...")
     
-    # Process moves in batches
-    for batch_num, i in enumerate(range(0, len(moves)), 1):
-        batch_items = list(moves.items())[i:i + batch_size]
-        print(f"\nProcessing batch {batch_num:,}/{total_batches:,} ({len(batch_items):,} files)...")
+    # Group moves by source and destination directories
+    dir_moves = {}  # {(src_dir, dest_dir): [(filename, video_id)]}
+    for video_id, (src_path, dest_path) in moves.items():
+        src_dir = os.path.dirname(src_path)
+        dest_dir = os.path.dirname(dest_path)
+        filename = os.path.basename(src_path)
+        if (src_dir, dest_dir) not in dir_moves:
+            dir_moves[(src_dir, dest_dir)] = []
+        dir_moves[(src_dir, dest_dir)].append((filename, video_id))
+    
+    # Process each directory pair
+    for (src_dir, dest_dir), file_moves in dir_moves.items():
+        print(f"\nMoving {len(file_moves)} files from:\n{src_dir}\nto:\n{dest_dir}")
         
-        # Process all files using individual moveto commands
-        for video_id, (src_path, dest_path) in batch_items:
-            print(f"Moving: {src_path}\n\t-> {dest_path}")
-            
-            # Escape special characters in paths for rclone
-            escaped_src = src_path.replace("[", "\\[").replace("]", "\\]").replace("{", "\\{").replace("}", "\\}")
-            escaped_dest = dest_path.replace("[", "\\[").replace("]", "\\]").replace("{", "\\{").replace("}", "\\}")
-            
-            cmd = ["rclone", "moveto", escaped_src, escaped_dest]
+        # Create a temporary file with the list of files to move
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
+            for filename, _ in file_moves:
+                temp_file.write(filename + '\n')
+            temp_file_path = temp_file.name
+        
+        try:
+            # Use rclone move with --files-from
+            cmd = ["rclone", "move", "--files-from", temp_file_path, src_dir, dest_dir]
             result = subprocess.run(cmd, capture_output=True, text=True)
             success = result.returncode == 0
-            results[video_id] = success
-            print(f"{'✓' if success else '✗'} Move {'succeeded' if success else 'failed'}")
-            if not success:
-                print("Error output:", result.stderr)
+            
+            if success:
+                print(f"✓ Successfully moved {len(file_moves)} files")
+                for _, video_id in file_moves:
+                    results[video_id] = True
+            else:
+                print(f"✗ Batch move failed, error output:")
+                print(result.stderr)
+                # If batch move fails, try individual moves as fallback
+                print("Attempting individual moves as fallback...")
+                for filename, video_id in file_moves:
+                    src_path = os.path.join(src_dir, filename)
+                    dest_path = os.path.join(dest_dir, filename)
+                    # Escape special characters in paths
+                    escaped_src = src_path.replace("[", "\\[").replace("]", "\\]").replace("{", "\\{").replace("}", "\\}")
+                    escaped_dest = dest_path.replace("[", "\\[").replace("]", "\\]").replace("{", "\\{").replace("}", "\\}")
+                    cmd = ["rclone", "moveto", escaped_src, escaped_dest]
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    success = result.returncode == 0
+                    results[video_id] = success
+                    print(f"{'✓' if success else '✗'} Individual move {'succeeded' if success else 'failed'} for {filename}")
+        finally:
+            # Clean up temp file
+            os.unlink(temp_file_path)
     
     print(f"\nBatch processing complete. {sum(results.values()):,} successful, {len(results) - sum(results.values()):,} failed")
     return results

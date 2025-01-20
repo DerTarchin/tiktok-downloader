@@ -13,7 +13,7 @@ selenium_total_items = 0
 selenium_processed_items = 0
 selenium_counter_lock = threading.Lock()
 
-def selenium_worker(selenium_handler, file_handler, yt_dlp_handler, output_folder):
+def selenium_worker(selenium_handler, file_handler, yt_dlp_handler):
     """Worker thread that processes failed yt-dlp downloads using Selenium."""
     global selenium_processed_items, selenium_total_items
     
@@ -21,7 +21,7 @@ def selenium_worker(selenium_handler, file_handler, yt_dlp_handler, output_folde
         try:
             # Get next item from queue with timeout to allow checking stop flag
             try:
-                url, collection_name, error_msg = selenium_queue.get(timeout=1)
+                url, collection_name, error_msg, output_folder = selenium_queue.get(timeout=1)
             except:
                 # Reset counters if queue is empty
                 if selenium_queue.empty():
@@ -80,17 +80,17 @@ def start_selenium_thread(selenium_handler, file_handler, yt_dlp_handler, output
     selenium_total_items = 0
     selenium_thread = threading.Thread(
         target=selenium_worker,
-        args=(selenium_handler, file_handler, yt_dlp_handler, output_folder),
+        args=(selenium_handler, file_handler, yt_dlp_handler),
         daemon=True
     )
     selenium_thread.start()
 
-def queue_selenium_download(url, collection_name, error_msg):
+def queue_selenium_download(url, collection_name, error_msg, output_folder):
     """Queue a URL for selenium download and update counter."""
     global selenium_total_items
     with selenium_counter_lock:
         selenium_total_items += 1
-    selenium_queue.put((url, collection_name, error_msg))
+    selenium_queue.put((url, collection_name, error_msg, output_folder))
 
 def stop_selenium_thread():
     """Stop the Selenium worker thread and wait for it to finish."""
@@ -215,13 +215,13 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
                                 file_handler.log_error(url, error_file_path, is_private=True)
                             else:
                                 # Queue failed downloads for selenium processing with error message
-                                queue_selenium_download(url, collection_name, error_msg)
+                                queue_selenium_download(url, collection_name, error_msg, output_folder)
                 except Exception as e:
                     print(f"\t  ❌\tBatch processing failed: {str(e)}")
                     # Queue all unhandled URLs in the batch for selenium processing
                     for url in batch:
                         if not file_handler.is_url_downloaded(url):
-                            queue_selenium_download(url, collection_name, str(e))
+                            queue_selenium_download(url, collection_name, str(e), output_folder)
         
         # Then process all photos
         if photo_urls:
@@ -229,7 +229,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
             for idx, url in enumerate(photo_urls, 1):
                 print(f"\tPhoto {idx} of {len(photo_urls)}: {url}")
                 # Queue photo downloads for selenium processing
-                queue_selenium_download(url, collection_name, "photo")
+                queue_selenium_download(url, collection_name, "photo", output_folder)
                 
         # Wait for all selenium downloads to complete before returning
         print("\nWaiting for queued downloads to complete...")
