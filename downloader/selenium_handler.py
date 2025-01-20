@@ -499,7 +499,6 @@ class SeleniumHandler:
             while time.time() - start_time < MAX_WAIT_TIME_SHORT:  # Short timeout just to detect if download started
                 downloaded_files = os.listdir(self.temp_download_dir)
                 if downloaded_files:
-                    print(f"Found {len(downloaded_files)} files in download directory")
                     # Include .part files in the search but prioritize complete files
                     complete_files = [f for f in downloaded_files if not f.endswith('.part')]
                     if complete_files:
@@ -513,7 +512,6 @@ class SeleniumHandler:
                         # Check if file is empty before processing
                         self._check_file_size_with_retries(downloaded_file)
                         
-                        print("Processing downloaded photo file...")
                         if self._process_downloaded_photo_file(downloaded_file, url, output_folder, video_id_suffix):
                             return  # Successfully processed, no need to try SnapTik
                         raise Exception("Failed to process downloaded photo file")
@@ -627,8 +625,6 @@ class SeleniumHandler:
             if file_size == 0:
                 raise Exception("Downloaded file is empty")
             
-            print(f"File has been successfully downloaded: {file_size / (1024*1024):.2f} MB")
-
             try:
                 title_element = WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.TAG_NAME, 'title'))
@@ -655,7 +651,6 @@ class SeleniumHandler:
                 
                 # Check if renamed file is empty with retries
                 self._check_file_size_with_retries(output_path)
-                print(f"Successfully processed and renamed photo file to: {filename}")
                 return True
                     
             except OSError as e:
@@ -666,7 +661,6 @@ class SeleniumHandler:
                     
                     # Check if renamed file is empty with retries
                     self._check_file_size_with_retries(simple_output_path)
-                    print(f"Successfully processed and renamed photo file to: {simple_filename}")
                     return True
                 else:
                     raise
