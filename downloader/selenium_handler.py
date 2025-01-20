@@ -494,7 +494,6 @@ class SeleniumHandler:
             convert_button.click()
 
             # Wait for new file to appear in temp downloads directory
-            print(f"Waiting for download to start...")
             start_time = time.time()
             while time.time() - start_time < MAX_WAIT_TIME_SHORT:  # Short timeout just to detect if download started
                 downloaded_files = os.listdir(self.temp_download_dir)
@@ -739,7 +738,6 @@ class SeleniumHandler:
             for attempt in range(max_retries):
                 current_size = os.path.getsize(file_path)
                 if current_size > 0:
-                    print(f"File has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
                     return True
                     
                 print(f"Retry {attempt + 1}/{max_retries}: File {base_name} is still empty, waiting...")
