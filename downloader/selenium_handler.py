@@ -23,18 +23,26 @@ MAX_WAIT_TIME_RENDER = 90  # Maximum wait time for photo render completion
 MAX_FILENAME_LENGTH = 70
 
 class SeleniumHandler:
-    def __init__(self, temp_download_dir, headless=True):
+    def __init__(self, temp_download_dir, headless=True, worker_num=None):
         # Convert temp_download_dir to absolute path if it's not already
         self.temp_download_dir = os.path.abspath(temp_download_dir)
         self.driver = None
         self.headless = headless
+        self.worker_num = worker_num
+        
+    def _log(self, message):
+        """Print a message with worker number prefix if available"""
+        if self.worker_num is not None:
+            print(f"[Worker {self.worker_num}] {message}")
+        else:
+            print(message)
         
     def startup(self):
         """
         Initialize and configure Selenium WebDriver with Firefox.
         Downloads and installs uBlock Origin, configures download settings.
         """
-        print("\nStarting Selenium...")
+        self._log("Starting Selenium...")
 
         # Download uBlock Origin XPI
         xpi_url = "https://addons.mozilla.org/firefox/downloads/file/4003969/ublock_origin-1.52.2.xpi"
@@ -105,7 +113,7 @@ class SeleniumHandler:
         except:
             pass
         
-        print("Selenium started")
+        self._log("Selenium started")
 
     def shutdown(self):
         """Quit the Selenium WebDriver with timeout protection"""
@@ -116,7 +124,7 @@ class SeleniumHandler:
                 # Try graceful shutdown first
                 self.driver.quit()
             except Exception as e:
-                print(f"\nWarning: Graceful Selenium shutdown failed: {e}")
+                self._log(f"\nWarning: Graceful Selenium shutdown failed: {e}")
                 try:
                     # Force kill the browser process if graceful shutdown fails
                     self.driver.quit()
@@ -160,7 +168,7 @@ class SeleniumHandler:
 
         return f"{uploader} - " if uploader else ""
 
-    def download_with_selenium(self, url, output_folder, file_handler, collection_name=None):
+    def download_with_selenium(self, url, output_folder, file_handler, collection_name=None, photos_only=False):
         """
         Download video/photo using Selenium automation of musicaldown.com.
         Falls back to snaptik.app if musicaldown fails.
@@ -170,13 +178,14 @@ class SeleniumHandler:
             output_folder: Folder to save downloaded file to
             file_handler: FileHandler instance for logging
             collection_name: Optional collection name for tracking downloads
+            photos_only: If True, only download photos/slideshows and abort video downloads
         
         Raises:
             Exception: If download fails at any step
         """
         # Skip if URL was already successfully downloaded
         if file_handler.is_url_downloaded(url, collection_name):
-            print(f"\t-> Already downloaded: {url}")
+            self._log(f"\t-> Already downloaded: {url}")
             return
         
         # Clear temp download directory before starting new download
@@ -184,28 +193,32 @@ class SeleniumHandler:
             try:
                 os.remove(os.path.join(self.temp_download_dir, file))
             except Exception as e:
-                print(f"\t-> Warning: Could not remove temp file {file}: {e}")
+                self._log(f"\t-> Warning: Could not remove temp file {file}: {e}")
 
         try:
             # Try musicaldown first
-            self._try_musicaldown_download(url, output_folder)
+            self._try_musicaldown_download(url, output_folder, photos_only)
             # After successful download and validation, log success
             file_handler.log_successful_download(url, collection_name)
         except Exception as e:
             if str(e) == "private":
                 raise
-            print(f"\t-> MusicalDown failed, trying SnapTik...")
+            if str(e) == "not_photo" and photos_only:
+                raise Exception("Skipping non-photo content")
+            self._log(f"\t-> MusicalDown failed, trying SnapTik...")
             try:
                 # Try snaptik as fallback
-                self._try_snaptik_download(url, output_folder)
+                self._try_snaptik_download(url, output_folder, photos_only)
                 # After successful download and validation, log success
                 file_handler.log_successful_download(url, collection_name)
             except Exception as e:
+                if str(e) == "not_photo" and photos_only:
+                    raise Exception("Skipping non-photo content")
                 if str(e) != "private":
-                    print(f"\t-> Failed to download: {url}")
+                    self._log(f"\t-> Failed to download: {url}")
                 raise
 
-    def _try_musicaldown_download(self, url, output_folder):
+    def _try_musicaldown_download(self, url, output_folder, photos_only=False):
         """Original musicaldown.com download logic"""
         # Get video ID from URL
         video_id_suffix = get_filename_suffix(url)
@@ -225,8 +238,8 @@ class SeleniumHandler:
                     url = f"https://www.tiktok.com/@/video/{video_id}/"
                 input_element.send_keys(url)
             except Exception as e:
-                print(f"\t-> Failed at: Finding and entering URL in input field for {url}")
-                print(f"\t-> Looking for element: ID 'link_url'")
+                self._log(f"\t-> Failed at: Finding and entering URL in input field for {url}")
+                self._log(f"\t-> Looking for element: ID 'link_url'")
                 raise Exception(f"Failed to find or interact with URL input field: {str(e)}")
 
             # Click submit and handle download based on content type
@@ -236,13 +249,15 @@ class SeleniumHandler:
                 )
                 submit_button.click()
             except Exception as e:
-                print(f"\t-> Failed at: Finding and clicking submit button")
-                print(f"\t-> Looking for element: CSS 'button[type='submit']'")
+                self._log(f"\t-> Failed at: Finding and clicking submit button")
+                self._log(f"\t-> Looking for element: CSS 'button[type='submit']'")
                 raise Exception(f"Failed to find or click submit button: {str(e)}")
             
             if "/photo/" in self.driver.current_url:
                 self._handle_photo_download(url, output_folder, video_id_suffix)
             elif "/video/" in url:
+                if photos_only:
+                    raise Exception("not_photo")
                 self._handle_video_download(url, output_folder, video_id_suffix)
             else:
                 raise Exception("URL is neither a photo nor a video post")
@@ -269,13 +284,14 @@ class SeleniumHandler:
         except:
             pass
 
-    def _try_snaptik_download(self, url, output_folder):
+    def _try_snaptik_download(self, url, output_folder, photos_only=False):
         """
         Try downloading using snaptik.app as a fallback.
         
         Args:
             url: URL to download
             output_folder: Folder to save downloaded file to
+            photos_only: If True, only download photos/slideshows and abort video downloads
             
         Raises:
             Exception: If download fails at any step
@@ -302,7 +318,7 @@ class SeleniumHandler:
                     url = f"https://www.tiktok.com/@/video/{video_id}/"
                 input_element.send_keys(url)
             except Exception as e:
-                print(f"\t-> Failed at: Finding and entering URL in SnapTik input field")
+                self._log(f"\t-> Failed at: Finding and entering URL in SnapTik input field")
                 raise Exception(f"Failed to find or interact with SnapTik URL input field: {str(e)}")
 
             self._dismiss_snaptik_ads()  # Check before clicking submit
@@ -315,7 +331,7 @@ class SeleniumHandler:
                 self._dismiss_snaptik_ads()  # Check again right before clicking
                 submit_button.click()
             except Exception as e:
-                print(f"\t-> Failed at: Finding and clicking SnapTik submit button")
+                self._log(f"\t-> Failed at: Finding and clicking SnapTik submit button")
                 raise Exception(f"Failed to find or click SnapTik submit button: {str(e)}")
 
             # Check for and dismiss any ads that appeared after submission
@@ -328,7 +344,7 @@ class SeleniumHandler:
                 )
                 self._dismiss_snaptik_ads()  # Check after title appears
             except Exception as e:
-                print(f"\t-> Failed at: Waiting for SnapTik video title")
+                self._log(f"\t-> Failed at: Waiting for SnapTik video title")
                 raise Exception(f"Failed to find video title on SnapTik: {str(e)}")
 
             # Get description and username
@@ -351,6 +367,8 @@ class SeleniumHandler:
                 # Determine which one is displayed
                 if video_link.is_displayed():
                     is_video = True
+                    if photos_only:
+                        raise Exception("not_photo")
                 elif render_button.is_displayed():
                     is_video = False
                 else:
@@ -358,14 +376,20 @@ class SeleniumHandler:
             except Exception as e:
                 if "Neither video nor photo download options are visible" in str(e):
                     raise
+                if "not_photo" in str(e):
+                    raise
                 # If element not found, try individual checks
                 try:
                     video_link = self.driver.find_element(By.CSS_SELECTOR, "a.download-file[data-event='server01_file']")
                     is_video = video_link.is_displayed()
+                    if photos_only and is_video:
+                        raise Exception("not_photo")
                 except:
                     try:
                         render_button = self.driver.find_element(By.CSS_SELECTOR, "button.btn-render")
                         is_video = not render_button.is_displayed()
+                        if photos_only and is_video:
+                            raise Exception("not_photo")
                     except:
                         raise Exception("No video or photo download options found on SnapTik")
 
@@ -409,7 +433,7 @@ class SeleniumHandler:
                     self._check_file_size_with_retries(download_path)
                     return
                 except Exception as e:
-                    print(f"\t-> Failed at: Video download process on SnapTik")
+                    self._log(f"\t-> Failed at: Video download process on SnapTik")
                     raise
 
             # Handle photo download
@@ -479,7 +503,7 @@ class SeleniumHandler:
                     self._check_file_size_with_retries(download_path)
                     return
                 except Exception as e:
-                    print(f"\t-> Failed at: Photo download process on SnapTik")
+                    self._log(f"\t-> Failed at: Photo download process on SnapTik")
                     raise
 
         except Exception as e:
@@ -518,8 +542,8 @@ class SeleniumHandler:
 
             raise Exception(f"No download started after {MAX_WAIT_TIME_SHORT} seconds")
         except Exception as e:
-            print(f"\t-> Failed at: Photo download process for {url}")
-            print(f"\t-> Error details: {str(e)}")
+            self._log(f"\t-> Failed at: Photo download process for {url}")
+            self._log(f"\t-> Error details: {str(e)}")
             raise
 
     def _handle_video_download(self, url, output_folder, video_id_suffix):
@@ -599,8 +623,8 @@ class SeleniumHandler:
             if str(e) == "private":
                 raise Exception("private")
             elif "href attribute is empty" not in str(e):
-                print(f"\t-> Failed at: Video download process for {url}")
-                print(f"\t-> Looking for element: CSS 'a[data-event=\"hd_download_click\"]'")
+                self._log(f"\t-> Failed at: Video download process for {url}")
+                self._log(f"\t-> Looking for element: CSS 'a[data-event=\"hd_download_click\"]'")
             raise
 
     def _get_video_description(self):
@@ -632,7 +656,7 @@ class SeleniumHandler:
                 if title_text == '\ufff6' or not title_text.strip():
                     title_text = ""
             except:
-                print("Could not find title element, using URL-based name")
+                self._log("Could not find title element, using URL-based name")
                 title_text = urlparse(url).path.split('/')[-1]
 
             uploader = self.get_uploader_from_page(url)
@@ -665,7 +689,7 @@ class SeleniumHandler:
                     raise
                     
         except Exception as e:
-            print(f"Error processing photo file: {str(e)}")
+            self._log(f"Error processing photo file: {str(e)}")
             # Try to clean up the downloaded file if it exists
             if os.path.exists(downloaded_file):
                 try:
@@ -714,6 +738,7 @@ class SeleniumHandler:
                 if not current_part_files and not base_name.endswith('.part'):
                     current_size = os.path.getsize(file_path)
                     if current_size > 0:
+                        self._log(f"File has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
                         return True
                 else:
                     # Check size of part file
@@ -725,6 +750,7 @@ class SeleniumHandler:
                 if current_size != last_size:
                     last_size = current_size
                     last_size_change = time.time()
+                    self._log(f"File {part_file} is downloading, current size: {current_size / 1_000_000:.2f} MB")
                 elif time.time() - last_size_change > MAX_WAIT_TIME_SHORT:
                     raise Exception(f"Download stalled - no file size changes for {MAX_WAIT_TIME_SHORT} seconds. Last size: {last_size / 1_000_000:.2f} MB")
                 
@@ -737,9 +763,10 @@ class SeleniumHandler:
             for attempt in range(max_retries):
                 current_size = os.path.getsize(file_path)
                 if current_size > 0:
+                    self._log(f"File has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
                     return True
                     
-                print(f"Retry {attempt + 1}/{max_retries}: File {base_name} is still empty, waiting...")
+                self._log(f"Retry {attempt + 1}/{max_retries}: File {base_name} is still empty, waiting...")
                 time.sleep(retry_delay)
                 
             raise Exception(f"File remains empty (0 bytes) after {max_retries} retries: {base_name}")

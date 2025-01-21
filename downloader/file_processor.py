@@ -7,13 +7,13 @@ from .utils import extract_video_id, split_urls_by_type, get_output_folder, get_
 
 # Queue for failed yt-dlp downloads that need selenium processing
 selenium_queue = Queue()
-selenium_thread = None
+selenium_threads = []
 selenium_thread_stop = threading.Event()
 selenium_total_items = 0
 selenium_processed_items = 0
 selenium_counter_lock = threading.Lock()
 
-def selenium_worker(selenium_handler, file_handler, yt_dlp_handler):
+def selenium_worker(selenium_handler, file_handler, yt_dlp_handler, worker_num):
     """Worker thread that processes failed yt-dlp downloads using Selenium."""
     global selenium_processed_items, selenium_total_items
     
@@ -38,52 +38,56 @@ def selenium_worker(selenium_handler, file_handler, yt_dlp_handler):
                     selenium_processed_items += 1
                     current = selenium_processed_items
                     total = selenium_total_items
-                    print(f"\n[Selenium Progress: {current}/{total}]")
+                    print(f"\n[Worker {worker_num}] [Selenium Progress: {current}/{total}]")
                 
                 # Handle different error types
                 if error_msg == "private":
-                    print(f"\t  ❌\tPrivate video: {url}")
+                    print(f"[Worker {worker_num}] \t  ❌\tPrivate video: {url}")
                     file_handler.log_error(url, error_file_path, is_private=True)
                     continue  # Skip selenium attempt but let finally block handle task_done
                     
                 # For all other errors, try selenium
                 if error_msg in yt_dlp_handler.all_error_types:
-                    print(f"\t  ⚠️\t{error_msg}, using Selenium: {url}")
+                    print(f"[Worker {worker_num}] \t  ⚠️\t{error_msg}, using Selenium: {url}")
                 else:
-                    print(f"\t  ⚠️\tyt-dlp failed ({error_msg}), using Selenium: {url}")
+                    print(f"[Worker {worker_num}] \t  ⚠️\tyt-dlp failed ({error_msg}), using Selenium: {url}")
                     
                 try:
                     selenium_handler.download_with_selenium(url, output_folder, file_handler, collection_name)
                     file_handler.log_successful_download(url, collection_name)
                 except Exception as e:
                     if str(e) == "private":
-                        print(f"\t  ❌\tPrivate video: {url}")
+                        print(f"[Worker {worker_num}] \t  ❌\tPrivate video: {url}")
                         file_handler.log_error(url, error_file_path, is_private=True)
                     else:
-                        print(f"\t  ❌\tSelenium failed: {str(e)}")
+                        print(f"[Worker {worker_num}] \t  ❌\tSelenium failed: {str(e)}")
                         file_handler.log_error(url, error_file_path)
                         
             except Exception as e:
-                print(f"\t  ❌\tSelenium worker error for {url}: {str(e)}")
+                print(f"[Worker {worker_num}] \t  ❌\tSelenium worker error for {url}: {str(e)}")
                 error_file_path = get_error_file_path(output_folder)
                 file_handler.log_error(url, error_file_path)
             finally:
                 selenium_queue.task_done()  # Only call task_done once, in finally block
         except Exception as e:
-            print(f"\t  ❌\tSelenium worker error: {str(e)}")
+            print(f"[Worker {worker_num}] \t  ❌\tSelenium worker error: {str(e)}")
 
-def start_selenium_thread(selenium_handler, file_handler, yt_dlp_handler, output_folder):
-    """Start the Selenium worker thread."""
-    global selenium_thread, selenium_processed_items, selenium_total_items
+def start_selenium_threads(selenium_handlers, file_handler, yt_dlp_handler):
+    """Start multiple Selenium worker threads."""
+    global selenium_threads, selenium_processed_items, selenium_total_items
     selenium_thread_stop.clear()
     selenium_processed_items = 0
     selenium_total_items = 0
-    selenium_thread = threading.Thread(
-        target=selenium_worker,
-        args=(selenium_handler, file_handler, yt_dlp_handler),
-        daemon=True
-    )
-    selenium_thread.start()
+    
+    # Create and start a thread for each selenium handler
+    for i, handler in enumerate(selenium_handlers, 1):
+        thread = threading.Thread(
+            target=selenium_worker,
+            args=(handler, file_handler, yt_dlp_handler, i),
+            daemon=True
+        )
+        thread.start()
+        selenium_threads.append(thread)
 
 def queue_selenium_download(url, collection_name, error_msg, output_folder):
     """Queue a URL for selenium download and update counter."""
@@ -92,17 +96,18 @@ def queue_selenium_download(url, collection_name, error_msg, output_folder):
         selenium_total_items += 1
     selenium_queue.put((url, collection_name, error_msg, output_folder))
 
-def stop_selenium_thread():
-    """Stop the Selenium worker thread and wait for it to finish."""
-    if selenium_thread:
-        selenium_thread_stop.set()
-        selenium_thread.join()
+def stop_selenium_threads():
+    """Stop all Selenium worker threads and wait for them to finish."""
+    selenium_thread_stop.set()
+    for thread in selenium_threads:
+        thread.join()
+    selenium_threads.clear()
         
 def wait_for_selenium_queue():
     """Wait for all queued Selenium downloads to complete."""
     selenium_queue.join()
 
-def process_file(file_path, index, total_files, file_handler, selenium_handler, 
+def process_file(file_path, index, total_files, file_handler, selenium_handlers, 
                 yt_dlp_handler, sync_handler, skip_private=False, skip_sync=False):
     """
     Process a single text file containing URLs to download.
@@ -112,7 +117,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         index: Current file index for progress display
         total_files: Total number of files to process
         file_handler: FileHandler instance
-        selenium_handler: SeleniumHandler instance
+        selenium_handlers: List of SeleniumHandler instances
         yt_dlp_handler: YtDlpHandler instance
         sync_handler: SyncHandler instance
         skip_private: Whether to skip known private videos
@@ -139,9 +144,9 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
     # Get error log path
     error_file_path = file_handler.get_error_log_path(file_path)
     
-    # Start selenium worker thread if not already running
-    if not selenium_thread or not selenium_thread.is_alive():
-        start_selenium_thread(selenium_handler, file_handler, yt_dlp_handler, output_folder)
+    # Start selenium worker threads if not already running
+    if not selenium_threads:
+        start_selenium_threads(selenium_handlers, file_handler, yt_dlp_handler)
     
     try:
         # Read URLs from file
@@ -245,7 +250,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handler,
         sync_handler.queue_sync(output_folder, username)
         print(f">> Queued for background sync: {os.path.basename(output_folder)}")
 
-def process_error_logs(input_path, file_handler, selenium_handler, 
+def process_error_logs(input_path, file_handler, selenium_handlers, 
                       yt_dlp_handler, sync_handler, skip_sync=False):
     """
     Process error log files and retry failed downloads.
@@ -253,7 +258,7 @@ def process_error_logs(input_path, file_handler, selenium_handler,
     Args:
         input_path: Directory containing error log files
         file_handler: FileHandler instance
-        selenium_handler: SeleniumHandler instance
+        selenium_handlers: List of SeleniumHandler instances
         yt_dlp_handler: YtDlpHandler instance
         sync_handler: SyncHandler instance
         skip_sync: Whether to skip syncing the processed folder
@@ -304,7 +309,8 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                 # Skip yt-dlp for photo URLs
                 if "/photo/" in url:
                     print(f"\t-> Photo URL detected, using Selenium")
-                    selenium_handler.download_with_selenium(url, output_folder, file_handler)
+                    for handler in selenium_handlers:
+                        handler.download_with_selenium(url, output_folder, file_handler)
                     success = True
                 else:
                     # Try yt-dlp first
@@ -328,16 +334,17 @@ def process_error_logs(input_path, file_handler, selenium_handler,
                         continue
                     elif error_msg in yt_dlp_handler.all_error_types or not success:
                         print(f"\t  ⚠️\t{error_msg.capitalize()} error, using Selenium: {url}")
-                        try:
-                            selenium_handler.download_with_selenium(url, output_folder, file_handler)
-                            success = True
-                        except Exception as e:
-                            if str(e) == "private":
-                                print(f"\t  ❌\tPrivate video: {url}")
-                                file_handler.log_error(url, error_file_path, is_private=True)
-                            else:
-                                print(f"\t  ❌\tSelenium failed: {str(e)}")
-                                file_handler.log_error(url, error_file_path)
+                        for handler in selenium_handlers:
+                            try:
+                                handler.download_with_selenium(url, output_folder, file_handler)
+                                success = True
+                            except Exception as e:
+                                if str(e) == "private":
+                                    print(f"\t  ❌\tPrivate video: {url}")
+                                    file_handler.log_error(url, error_file_path, is_private=True)
+                                else:
+                                    print(f"\t  ❌\tSelenium failed: {str(e)}")
+                                    file_handler.log_error(url, error_file_path)
             
             except Exception as e:
                 print(f"\t-> Retry failed: {e}")

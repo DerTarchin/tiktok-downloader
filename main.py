@@ -9,14 +9,14 @@ from downloader.sync_handler import SyncHandler
 from downloader.validator import Validator
 from downloader.utils import (get_highest_group_number, write_and_process_urls, 
                             split_into_groups, print_final_summary)
-from downloader.file_processor import process_file, process_error_logs, stop_selenium_thread
+from downloader.file_processor import process_file, process_error_logs, stop_selenium_threads
 import subprocess
 
 
 def main():
     # Check for correct usage
     if len(sys.argv) < 2:
-        print("Usage: python script.py <input_directory_or_file> [--errors-only] [--disable-headless] [--combine-uncategorized] [--concurrent N] [--skip-validation] [--skip-private] [--skip-sync]")
+        print("Usage: python script.py <input_directory_or_file> [--errors-only] [--disable-headless] [--combine-uncategorized] [--concurrent N] [--skip-validation] [--skip-private] [--skip-sync] [--selenium-half]")
         sys.exit(1)
 
     # Get the input path and check for flags
@@ -39,18 +39,28 @@ def main():
             except ValueError:
                 print("Warning: Invalid concurrent downloads value. Using default (2).")
     
+    # Calculate selenium concurrency
+    selenium_half = "--selenium-half" in sys.argv
+    selenium_concurrent = concurrent_downloads // 2 if selenium_half else concurrent_downloads
+    if selenium_concurrent < 1:
+        selenium_concurrent = 1
+    
     # Initialize handlers
     file_handler = FileHandler(input_path)
     
-    # Create temp_download_dir in the same directory as input_path
+    # Create base temp download directory
     if os.path.isfile(input_path):
         base_dir = os.path.dirname(input_path)
     else:
         base_dir = input_path
-    temp_download_dir = os.path.join(base_dir, "_tmp")
-    os.makedirs(temp_download_dir, exist_ok=True)
+        
+    # Create multiple selenium handlers with unique temp directories
+    selenium_handlers = []
+    for i in range(selenium_concurrent):
+        temp_download_dir = os.path.join(base_dir, f"_tmp_{i+1}")
+        os.makedirs(temp_download_dir, exist_ok=True)
+        selenium_handlers.append(SeleniumHandler(temp_download_dir, headless=headless, worker_num=i+1))
     
-    selenium_handler = SeleniumHandler(temp_download_dir, headless=headless)
     yt_dlp_handler = YtDlpHandler(max_concurrent=concurrent_downloads)
     sync_handler = SyncHandler()
     validator = Validator()
@@ -59,7 +69,10 @@ def main():
     print(f"\nFound {total_videos:,} unique videos to process")
     
     try:
-        selenium_handler.startup()
+        # Start up all selenium handlers
+        for handler in selenium_handlers:
+            handler.startup()
+            
         if not skip_sync:
             sync_handler.start_sync_thread()
 
@@ -67,7 +80,7 @@ def main():
             print("\nRunning in errors-only mode...")
             process_error_logs(input_path if os.path.isdir(input_path) 
                              else os.path.dirname(input_path),
-                             file_handler, selenium_handler, 
+                             file_handler, selenium_handlers, 
                              yt_dlp_handler, sync_handler,
                              skip_sync=skip_sync)
         else:
@@ -135,7 +148,7 @@ def main():
                         with open(file_path, "r") as f:
                             processed_urls.update(url.strip() for url in f.readlines() if url.strip())
                         process_file(file_path, index, total_files,
-                                  file_handler, selenium_handler, 
+                                  file_handler, selenium_handlers, 
                                   yt_dlp_handler, sync_handler,
                                   skip_private=skip_private,
                                   skip_sync=skip_sync)
@@ -147,7 +160,7 @@ def main():
                         group_num = int(group_file.split("Group ")[1].split(")")[0])
                         process_file(group_file, group_num + regular_collection_end_index,
                                   total_files,
-                                  file_handler, selenium_handler,
+                                  file_handler, selenium_handlers,
                                   yt_dlp_handler, sync_handler,
                                   skip_private=skip_private,
                                   skip_sync=skip_sync)
@@ -156,7 +169,7 @@ def main():
                     remaining_uncategorized = os.path.join(input_path, 
                                                          f"{file_handler.all_saves_name}.txt")
                     write_and_process_urls(remaining_uncategorized, urls,
-                                        file_handler, selenium_handler,
+                                        file_handler, selenium_handlers,
                                         yt_dlp_handler, sync_handler,
                                         None, total_files,
                                         skip_private=skip_private,
@@ -166,7 +179,7 @@ def main():
                 # If it's a single file, process it directly
                 if input_path.endswith(".txt"):
                     process_file(input_path, 1, 1,
-                              file_handler, selenium_handler,
+                              file_handler, selenium_handlers,
                               yt_dlp_handler, sync_handler,
                               skip_private=skip_private,
                               skip_sync=skip_sync)
@@ -183,7 +196,7 @@ def main():
             # Process error logs
             process_error_logs(input_path if os.path.isdir(input_path) 
                              else os.path.dirname(input_path),
-                             file_handler, selenium_handler,
+                             file_handler, selenium_handlers,
                              yt_dlp_handler, sync_handler,
                              skip_sync=skip_sync)
             
@@ -202,35 +215,41 @@ def main():
             
     except KeyboardInterrupt:
         print("\nProcess interrupted by user. Cleaning up...")
-        selenium_handler.cleanup()
+        for handler in selenium_handlers:
+            handler.cleanup()
         sys.exit(1)
     except Exception as e:
         print(f"\nError: {str(e)}")
-        selenium_handler.cleanup()
+        for handler in selenium_handlers:
+            handler.cleanup()
         sys.exit(1)
     
     finally:
         # Ensure sync thread is stopped
         sync_handler.stop_sync_thread()
         
-        # Stop selenium worker thread
-        stop_selenium_thread()
+        # Stop selenium worker threads
+        stop_selenium_threads()
         
-        # Shutdown handlers
-        selenium_handler.shutdown()
+        # Shutdown all selenium handlers
+        for handler in selenium_handlers:
+            handler.shutdown()
+            
         yt_dlp_handler.shutdown()  # Clean up thread pool
         
-        # Clean up temp download directory
-        if os.path.exists(temp_download_dir):
-            for file in os.listdir(temp_download_dir):
+        # Clean up all temp download directories
+        for i in range(selenium_concurrent):
+            temp_download_dir = os.path.join(base_dir, f"_tmp_{i+1}")
+            if os.path.exists(temp_download_dir):
+                for file in os.listdir(temp_download_dir):
+                    try:
+                        os.remove(os.path.join(temp_download_dir, file))
+                    except:
+                        pass
                 try:
-                    os.remove(os.path.join(temp_download_dir, file))
+                    os.rmdir(temp_download_dir)
                 except:
                     pass
-            try:
-                os.rmdir(temp_download_dir)
-            except:
-                pass
 
     print("\nProcessing complete.")
     

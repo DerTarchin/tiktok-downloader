@@ -230,6 +230,30 @@ The script will:
 - Report the number of duplicates removed from each file
 - Show a summary of total duplicates removed
 
+### download_slideshows.py
+
+A utility script to download TikTok slideshows using only the selenium pipeline, skipping yt-dlp.
+
+```bash
+# Download from a single file
+python scripts/download_slideshows.py path/to/urls.txt
+
+# Download from all .txt files in a directory
+python scripts/download_slideshows.py path/to/directory
+
+# Disable headless mode (show browser)
+python scripts/download_slideshows.py path/to/directory --disable-headless
+```
+
+The script will:
+
+- Process URLs from a single file or all .txt files in a directory
+- Use only the selenium pipeline for downloading (skips yt-dlp)
+- Create folders based on input file names
+- Track successful downloads to avoid duplicates
+- Handle private videos gracefully
+- Clean up temporary files after completion
+
 ### download_tiktok_audio.py
 
 A utility script to extract and download TikTok audio files from a text file containing sound links.
