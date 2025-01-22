@@ -2,19 +2,13 @@
 
 import os
 import subprocess
-import concurrent.futures
-from queue import Queue
 from threading import Lock
 from .utils import get_filename_suffix
 
 MAX_FILENAME_LENGTH = 70
 
 class YtDlpHandler:
-    def __init__(self, max_concurrent=3):
-        self.max_concurrent = max_concurrent
-        self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent)
-        self.download_queue = Queue()
-        self.result_lock = Lock()
+    def __init__(self):
         self.all_error_types = ["private", "rate limited", "network", "audio only", "not video file", "vpn blocked"]
         
         # Add counters for VPN blocks and successful downloads
@@ -22,7 +16,7 @@ class YtDlpHandler:
         self.successful_download_count = 0
         self.vpn_block_threshold = 5  # Ask for user input after this many consecutive blocks
         self.success_reset_threshold = 10  # Reset VPN block count after this many consecutive successes
-        
+
     def try_yt_dlp(self, url, output_folder):
         """
         Attempt to download using yt-dlp.
@@ -78,7 +72,7 @@ class YtDlpHandler:
                 return False, "network", 0.0  # Network connectivity issues
             elif "HTTP Error 429" in stderr:
                 return False, "rate limited", 0.0  # Rate limiting
-                
+            
             # Check if only audio formats are available
             if stdout and any(["audio only" in stderr.lower(), "no video formats found" in stderr.lower()]):
                 return False, "audio only", 0.0
@@ -87,7 +81,6 @@ class YtDlpHandler:
             download_command = [
                 "yt-dlp",
                 "--windows-filenames",
-                "--concurrent-fragments", "3",  # Enable concurrent fragment downloads
                 "-o", f"{output_folder}/%(uploader)s - %(title).{MAX_FILENAME_LENGTH}B{video_id_suffix}.%(ext)s",
                 url
             ]
@@ -120,7 +113,7 @@ class YtDlpHandler:
                             download_speed = float(speed_str)
                         except (IndexError, ValueError):
                             pass
-                
+
                 # Increment successful download counter and check if we should reset VPN block count
                 self.successful_download_count += 1
                 if self.successful_download_count >= self.success_reset_threshold:
@@ -147,7 +140,7 @@ class YtDlpHandler:
                 return False, "vpn blocked", 0.0
             elif any(msg in stderr for msg in ["Video not available", "This video is private", "Video unavailable", "Unable to extract video data"]):
                 return False, "private", 0.0
-            
+
             return False, stderr, 0.0
 
         except Exception as e:
@@ -169,48 +162,7 @@ class YtDlpHandler:
             elif any(msg in error_str for msg in ["connection", "timeout", "network"]):
                 return False, "network", 0.0
             return False, str(e), 0.0
-            
-    def process_url_batch(self, urls, output_folder):
-        """
-        Process a batch of URLs concurrently.
-        
-        Args:
-            urls: List of URLs to download
-            output_folder: Folder to save downloaded files to
-            
-        Returns:
-            dict: Dictionary mapping URLs to their download results
-        """
-        futures = []
-        results = {}
-        total_speed = 0.0
-        successful_downloads = 0
-        
-        # Submit all URLs to the thread pool
-        for url in urls:
-            future = self.thread_pool.submit(self.try_yt_dlp, url, output_folder)
-            futures.append((url, future))
-        
-        # Collect results as they complete
-        for url, future in futures:
-            try:
-                success, error_msg, speed = future.result()
-                with self.result_lock:
-                    results[url] = (success, error_msg)
-                    if success:
-                        total_speed += speed
-                        successful_downloads += 1
-            except Exception as e:
-                with self.result_lock:
-                    results[url] = (False, str(e))
-        
-        # Print average download speed if there were successful downloads
-        if successful_downloads > 0:
-            avg_speed = total_speed / successful_downloads
-            print(f"\nAverage download speed for batch: {avg_speed:.2f} MiB/s")
-        
-        return results
-        
+
     def shutdown(self):
-        """Cleanup thread pool resources"""
-        self.thread_pool.shutdown(wait=True) 
+        """Cleanup resources"""
+        pass  # No cleanup needed anymore since workers moved to file_processor.py 

@@ -1,13 +1,13 @@
 """Utility functions for TikTok downloader."""
 
 import os
-import sys
 import re
 from urllib.parse import urlparse
 import time
 import subprocess
 
 SPLIT_SIZE = 500  # Maximum number of URLs per split file
+FILE_SIZE_THRESHOLD_KB = 50 # Minimum file size in KB
 
 
 def clean_filename(name):
@@ -97,7 +97,7 @@ def get_highest_group_number(input_path, all_saves_name):
 
 def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_handler, 
                           yt_dlp_handler, sync_handler, group_num=None, total_files=None, 
-                          skip_private=False, skip_sync=False):
+                          skip_private=False, skip_sync=False, verbose=False, max_concurrent=3):
     """
     Write URLs to file and process them.
     
@@ -112,6 +112,8 @@ def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_hand
         total_files: Optional total number of files for progress display
         skip_private: Whether to skip known private videos
         skip_sync: Whether to skip syncing the processed folder
+        verbose: Whether to print verbose output
+        max_concurrent: Maximum number of concurrent yt-dlp downloads
     """
     # Get existing URLs if file exists
     existing_urls = []
@@ -138,11 +140,13 @@ def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_hand
                 if group_num is not None:
                     process_file(output_file, group_num, total_files,
                               file_handler, selenium_handler, yt_dlp_handler, sync_handler, 
-                              skip_private=skip_private, skip_sync=skip_sync)
+                              skip_private=skip_private, skip_sync=skip_sync, verbose=verbose,
+                              max_concurrent=max_concurrent)
                 else:
                     process_file(output_file, total_files, total_files,
                               file_handler, selenium_handler, yt_dlp_handler, sync_handler, 
-                              skip_private=skip_private, skip_sync=skip_sync)
+                              skip_private=skip_private, skip_sync=skip_sync, verbose=verbose,
+                              max_concurrent=max_concurrent)
                 break  # Success - exit retry loop
                 
             except Exception as e:
@@ -154,7 +158,7 @@ def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_hand
                         continue
                 raise  # Re-raise the exception if we've exhausted retries
 
-def split_into_groups(urls, input_path, file_handler, start_group):
+def split_into_groups(urls, input_path, file_handler, start_group, verbose=False):
     """
     Split URLs into group files and return the file paths.
     Preserves existing group files and their contents.
@@ -166,12 +170,14 @@ def split_into_groups(urls, input_path, file_handler, start_group):
         input_path: Directory to create group files in
         file_handler: FileHandler instance
         start_group: Starting group number
+        verbose: Whether to print verbose output
         
     Returns:
         list: Paths to all group files (existing + new)
     """
-    print(f"\nAnalyzing existing groups and URLs...")
-    print(f"Total URLs to process: {len(urls):,}")
+    if verbose:
+        print(f"\nAnalyzing existing groups and URLs...")
+        print(f"Total URLs to process: {len(urls):,}")
     
     group_files = []
     existing_urls = set()
@@ -179,10 +185,12 @@ def split_into_groups(urls, input_path, file_handler, start_group):
     
     # First, collect URLs from existing group files and map them to their groups
     group_to_urls = {}
-    print("Scanning for existing group files...")
+    if verbose:
+        print("Scanning for existing group files...")
     
     # First check source files for duplicates
-    print("Checking source files for duplicates...")
+    if verbose:
+        print("Checking source files for duplicates...")
     source_video_ids = set()
     text_files = [f for f in os.listdir(input_path) 
                  if f.endswith(".txt") 
@@ -196,7 +204,8 @@ def split_into_groups(urls, input_path, file_handler, start_group):
             source_links = [url.strip() for url in f.readlines() if url.strip()]
             source_video_ids.update(extract_video_id(url) for url in source_links)
     
-    print(f"Found {len(source_video_ids):,} existing video IDs in source files")
+    if verbose:
+        print(f"Found {len(source_video_ids):,} existing video IDs in source files")
     
     # Now check existing group files
     for file in os.listdir(input_path):
@@ -216,14 +225,17 @@ def split_into_groups(urls, input_path, file_handler, start_group):
                     )
                 group_files.append(file_path)
             except (ValueError, IndexError):
-                print(f"Skipping invalid group file: {file}")
+                if verbose:
+                    print(f"Skipping invalid group file: {file}")
                 continue
     
-    print(f"Found {len(group_files):,} existing group files")
-    print(f"Found {len(existing_urls):,} existing URLs")
+    if verbose:
+        print(f"Found {len(group_files):,} existing group files")
+        print(f"Found {len(existing_urls):,} existing URLs")
     
     # Find URLs that aren't in any existing group or source file
-    print("Checking for new URLs...")
+    if verbose:
+        print("Checking for new URLs...")
     new_urls = []
     
     for url in urls:
@@ -232,10 +244,12 @@ def split_into_groups(urls, input_path, file_handler, start_group):
         is_new = video_id not in existing_video_ids and video_id not in source_video_ids
         if is_new:
             new_urls.append(url)
-    print(f"Found {len(new_urls):,} new URLs to process")
+    if verbose:
+        print(f"Found {len(new_urls):,} new URLs to process")
 
     if not new_urls and group_files:
-        print("No new URLs to process - using existing group files")
+        if verbose:
+            print("No new URLs to process - using existing group files")
         return sorted(group_files)
     
     # Find the highest existing group number and any gaps in numbering
@@ -245,24 +259,28 @@ def split_into_groups(urls, input_path, file_handler, start_group):
         highest_group = max(group_to_urls.keys())
         expected_groups = set(range(1, highest_group + 1))
         missing_groups = expected_groups - set(group_to_urls.keys())
-        if missing_groups:
+        if missing_groups and verbose:
             print(f"Found gaps in group numbering: missing groups {sorted(missing_groups)}")
     
     # Calculate how many groups we need for new URLs
     total_groups_needed = (len(new_urls) + SPLIT_SIZE - 1) // SPLIT_SIZE
-    print(f"Need {total_groups_needed:,} groups for new URLs (max {SPLIT_SIZE} URLs per group)")
+    if verbose:
+        print(f"Need {total_groups_needed:,} groups for new URLs (max {SPLIT_SIZE} URLs per group)")
     
     # If we have missing groups, use those numbers first
     if group_to_urls:
         missing_groups = expected_groups - set(group_to_urls.keys())
         available_group_nums = sorted(missing_groups) + list(range(highest_group + 1, highest_group + total_groups_needed + 1))
-        print(f"Will use group numbers: {available_group_nums}")
+        if verbose:
+            print(f"Will use group numbers: {available_group_nums}")
     else:
         available_group_nums = list(range(1, total_groups_needed + 1))
-        print(f"Creating new groups numbered 1 to {total_groups_needed:,}")
+        if verbose:
+            print(f"Creating new groups numbered 1 to {total_groups_needed:,}")
     
     # Create new group files for new URLs
-    print(f"\nCreating group files (with {SPLIT_SIZE:,} each)...")
+    if verbose:
+        print(f"\nCreating group files (with {SPLIT_SIZE:,} each)...")
     for i in range(0, len(new_urls), SPLIT_SIZE):
         group_num = available_group_nums[i // SPLIT_SIZE]
         group_urls = new_urls[i:i + SPLIT_SIZE]
@@ -275,7 +293,8 @@ def split_into_groups(urls, input_path, file_handler, start_group):
         if group_file not in group_files:
             group_files.append(group_file)
     
-    print(f"Finished creating {len(group_files):,} total group files")
+    if verbose:
+        print(f"Finished creating {len(group_files):,} total group files")
     return sorted(group_files)  # Return all files (existing + new) in sorted order
 
 def remove_duplicates_from_groups(source_file, directory, dry_run=False):
@@ -485,3 +504,10 @@ def get_error_file_path(output_folder):
     collection_name = os.path.basename(output_folder)
     return os.path.join(os.path.dirname(output_folder), f"[error log] {collection_name}.txt")
     
+def log_worker(worker_type, worker_num, message):
+    """Log a message for a worker."""
+    print(f"{time.strftime('%I:%M:%S')} [{worker_type}-{'0' if worker_num < 10 else ''}{worker_num}] {message}")
+
+def is_file_size_valid(file_size_in_bytes):
+    """Check if a file is valid based on its size."""
+    return file_size_in_bytes / 1_000 > FILE_SIZE_THRESHOLD_KB
