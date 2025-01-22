@@ -157,7 +157,7 @@ class SeleniumHandler:
                         self.driver.quit()
                     except:
                         pass
-                
+
                 # If browser is not responsive or graceful shutdown failed, force kill
                 if browser_pid:
                     try:
@@ -181,6 +181,24 @@ class SeleniumHandler:
                 self._log(f"\nWarning: Graceful Selenium shutdown failed: {e}")
             finally:
                 self.driver = None
+                
+                # Clean up temp directory
+                if os.path.exists(self.temp_download_dir):
+                    try:
+                        # Remove all files in temp directory
+                        for file in os.listdir(self.temp_download_dir):
+                            try:
+                                file_path = os.path.join(self.temp_download_dir, file)
+                                os.remove(file_path)
+                            except Exception as e:
+                                self._log(f"\nWarning: Could not remove temp file {file}: {e}")
+                        # Try to remove the directory itself
+                        try:
+                            os.rmdir(self.temp_download_dir)
+                        except Exception as e:
+                            self._log(f"\nWarning: Could not remove temp directory: {e}")
+                    except Exception as e:
+                        self._log(f"\nWarning: Error cleaning up temp directory: {e}")
 
     def cleanup(self):
         """Alias for shutdown to maintain compatibility with signal handling"""

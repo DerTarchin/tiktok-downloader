@@ -10,7 +10,8 @@ from downloader.sync_handler import SyncHandler
 from downloader.validator import Validator
 from downloader.utils import (get_highest_group_number, write_and_process_urls, 
                             split_into_groups, print_final_summary)
-from downloader.file_processor import process_file, process_error_logs, stop_selenium_threads, stop_yt_dlp_threads
+from downloader.file_processor import process_file, process_error_logs
+from downloader.worker_pool import WorkerPool
 import subprocess
 
 
@@ -68,9 +69,11 @@ def main():
         os.makedirs(temp_download_dir, exist_ok=True)
         selenium_handlers.append(SeleniumHandler(temp_download_dir, headless=headless, worker_num=i+1, verbose=verbose))
     
+    # Initialize other handlers
     yt_dlp_handler = YtDlpHandler()
     sync_handler = SyncHandler()
     validator = Validator()
+    worker_pool = WorkerPool()
 
     try:
         # Start up all selenium handlers
@@ -222,8 +225,7 @@ def main():
                 
                 # Stop all workers before final sync
                 print("\n>> Stopping all workers before final sync...")
-                stop_selenium_threads()
-                stop_yt_dlp_threads()
+                worker_pool.shutdown()
                 
                 # Then shutdown each handler with proper cleanup
                 for handler in selenium_handlers:
@@ -243,8 +245,7 @@ def main():
     except KeyboardInterrupt:
         print("\nProcess interrupted by user. Cleaning up...")
         # First stop all worker threads
-        stop_selenium_threads()
-        stop_yt_dlp_threads()
+        worker_pool.shutdown()
         
         # Then shutdown each handler with proper cleanup
         for handler in selenium_handlers:
@@ -257,8 +258,7 @@ def main():
     except Exception as e:
         print(f"\nError: {str(e)}")
         # First stop all worker threads
-        stop_selenium_threads()
-        stop_yt_dlp_threads()
+        worker_pool.shutdown()
         
         # Then shutdown each handler with proper cleanup
         for handler in selenium_handlers:
@@ -274,8 +274,7 @@ def main():
         sync_handler.stop_sync_thread()
         
         # Stop worker threads
-        stop_selenium_threads()
-        stop_yt_dlp_threads()
+        worker_pool.shutdown()
         
         # Shutdown all selenium handlers with proper cleanup
         for handler in selenium_handlers:
@@ -285,20 +284,6 @@ def main():
                 print(f"\nWarning: Error during handler shutdown: {e}")
             
         yt_dlp_handler.shutdown()  # Clean up thread pool
-        
-        # Clean up all temp download directories
-        for i in range(selenium_concurrent):
-            temp_download_dir = os.path.join(base_dir, f"_tmp_{i+1}")
-            if os.path.exists(temp_download_dir):
-                for file in os.listdir(temp_download_dir):
-                    try:
-                        os.remove(os.path.join(temp_download_dir, file))
-                    except:
-                        pass
-                try:
-                    os.rmdir(temp_download_dir)
-                except:
-                    pass
 
     print("\nProcessing complete.")
     
