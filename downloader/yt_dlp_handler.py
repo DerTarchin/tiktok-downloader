@@ -8,8 +8,7 @@ from .utils import get_filename_suffix
 MAX_FILENAME_LENGTH = 70
 
 class YtDlpHandler:
-    def __init__(self, max_concurrent=3):
-        self.max_concurrent = max_concurrent
+    def __init__(self):
         self.all_error_types = ["private", "rate limited", "network", "audio only", "not video file", "vpn blocked"]
         
         # Add counters for VPN blocks and successful downloads
@@ -82,7 +81,6 @@ class YtDlpHandler:
             download_command = [
                 "yt-dlp",
                 "--windows-filenames",
-                "--concurrent-fragments", "3",  # Enable concurrent fragment downloads
                 "-o", f"{output_folder}/%(uploader)s - %(title).{MAX_FILENAME_LENGTH}B{video_id_suffix}.%(ext)s",
                 url
             ]

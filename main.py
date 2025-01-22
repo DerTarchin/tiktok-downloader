@@ -24,7 +24,7 @@ def main():
     parser.add_argument('--skip-validation', action='store_true', help='Skip validation step')
     parser.add_argument('--skip-private', action='store_true', help='Skip private videos')
     parser.add_argument('--skip-sync', action='store_true', help='Skip synchronization step')
-    parser.add_argument('--selenium-half', action='store_true', help='Use half the concurrency for Selenium')
+    parser.add_argument('--concurrent-selenium', type=int, help='Number of concurrent Selenium downloads (defaults to --concurrent value)')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
 
     args = parser.parse_args()
@@ -44,9 +44,8 @@ def main():
     if concurrent_downloads < 1:
         concurrent_downloads = 1
     
-    # Calculate selenium concurrency
-    selenium_half = args.selenium_half
-    selenium_concurrent = concurrent_downloads // 2 if selenium_half else concurrent_downloads
+    # Set selenium concurrency
+    selenium_concurrent = args.concurrent_selenium if args.concurrent_selenium is not None else concurrent_downloads
     if selenium_concurrent < 1:
         selenium_concurrent = 1
     
@@ -69,7 +68,7 @@ def main():
         os.makedirs(temp_download_dir, exist_ok=True)
         selenium_handlers.append(SeleniumHandler(temp_download_dir, headless=headless, worker_num=i+1, verbose=verbose))
     
-    yt_dlp_handler = YtDlpHandler(max_concurrent=concurrent_downloads)
+    yt_dlp_handler = YtDlpHandler()
     sync_handler = SyncHandler()
     validator = Validator()
 
@@ -160,7 +159,8 @@ def main():
                                   yt_dlp_handler, sync_handler,
                                   skip_private=skip_private,
                                   skip_sync=skip_sync,
-                                  verbose=verbose)
+                                  verbose=verbose,
+                                  max_concurrent=concurrent_downloads)
 
                 # Finally, process the uncategorized groups if they were created
                 if group_files:
@@ -173,7 +173,8 @@ def main():
                                   yt_dlp_handler, sync_handler,
                                   skip_private=skip_private,
                                   skip_sync=skip_sync,
-                                  verbose=verbose)
+                                  verbose=verbose,
+                                  max_concurrent=concurrent_downloads)
                 elif os.path.exists(all_saves_path) and combine_uncategorized:
                     # Original behavior for non-split processing
                     remaining_uncategorized = os.path.join(input_path, 
@@ -184,7 +185,8 @@ def main():
                                         None, total_files,
                                         skip_private=skip_private,
                                         skip_sync=skip_sync,
-                                        verbose=verbose)
+                                        verbose=verbose,
+                                        max_concurrent=concurrent_downloads)
 
             elif os.path.isfile(input_path):
                 # If it's a single file, process it directly
@@ -194,7 +196,8 @@ def main():
                               yt_dlp_handler, sync_handler,
                               skip_private=skip_private,
                               skip_sync=skip_sync,
-                              verbose=verbose)
+                              verbose=verbose,
+                              max_concurrent=concurrent_downloads)
                 else:
                     print(f"File {input_path} is not a .txt file. Skipping.")
             else:
@@ -216,6 +219,18 @@ def main():
             if not skip_sync:
                 print("\n>> Waiting for all syncs to complete...")
                 sync_handler.wait_for_syncs()
+                
+                # Stop all workers before final sync
+                print("\n>> Stopping all workers before final sync...")
+                stop_selenium_threads()
+                stop_yt_dlp_threads()
+                
+                # Then shutdown each handler with proper cleanup
+                for handler in selenium_handlers:
+                    try:
+                        handler.shutdown()
+                    except Exception as e:
+                        print(f"\nWarning: Error during handler shutdown: {e}")
                 
                 # Stop the sync thread
                 sync_handler.stop_sync_thread()

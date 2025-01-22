@@ -97,7 +97,7 @@ def get_highest_group_number(input_path, all_saves_name):
 
 def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_handler, 
                           yt_dlp_handler, sync_handler, group_num=None, total_files=None, 
-                          skip_private=False, skip_sync=False, verbose=False):
+                          skip_private=False, skip_sync=False, verbose=False, max_concurrent=3):
     """
     Write URLs to file and process them.
     
@@ -113,6 +113,7 @@ def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_hand
         skip_private: Whether to skip known private videos
         skip_sync: Whether to skip syncing the processed folder
         verbose: Whether to print verbose output
+        max_concurrent: Maximum number of concurrent yt-dlp downloads
     """
     # Get existing URLs if file exists
     existing_urls = []
@@ -139,11 +140,13 @@ def write_and_process_urls(output_file, urls_to_add, file_handler, selenium_hand
                 if group_num is not None:
                     process_file(output_file, group_num, total_files,
                               file_handler, selenium_handler, yt_dlp_handler, sync_handler, 
-                              skip_private=skip_private, skip_sync=skip_sync, verbose=verbose)
+                              skip_private=skip_private, skip_sync=skip_sync, verbose=verbose,
+                              max_concurrent=max_concurrent)
                 else:
                     process_file(output_file, total_files, total_files,
                               file_handler, selenium_handler, yt_dlp_handler, sync_handler, 
-                              skip_private=skip_private, skip_sync=skip_sync, verbose=verbose)
+                              skip_private=skip_private, skip_sync=skip_sync, verbose=verbose,
+                              max_concurrent=max_concurrent)
                 break  # Success - exit retry loop
                 
             except Exception as e:
@@ -503,7 +506,7 @@ def get_error_file_path(output_folder):
     
 def log_worker(worker_type, worker_num, message):
     """Log a message for a worker."""
-    print(f"[{time.strftime('%I:%M:%S')}] [{worker_type}-{worker_num}] {message}")
+    print(f"{time.strftime('%I:%M:%S')} [{worker_type}-{'0' if worker_num < 10 else ''}{worker_num}] {message}")
 
 def is_file_size_valid(file_size_in_bytes):
     """Check if a file is valid based on its size."""

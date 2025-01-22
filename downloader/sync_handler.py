@@ -220,13 +220,25 @@ class SyncHandler:
                 return False
         return False
 
-    def sync_remaining_files(self, input_path):
+    def sync_remaining_files(self, input_path, selenium_handlers=None, yt_dlp_handler=None):
         """
         Sync remaining files (text files, logs) without deleting remote folders.
         
         Args:
             input_path: Path containing files to sync
+            selenium_handlers: List of SeleniumHandler instances to clean up
+            yt_dlp_handler: YtDlpHandler instance to clean up
         """
+        # First clean up all workers and handlers
+        if selenium_handlers:
+            print(">> Shutting down Selenium workers...")
+            for handler in selenium_handlers:
+                handler.shutdown()
+        
+        if yt_dlp_handler:
+            print(">> Shutting down yt-dlp handler...")
+            yt_dlp_handler.shutdown()
+
         username = os.path.basename(input_path)
         remote_path = f"{self.gdrive_base_path}/{username}"
 

@@ -5,7 +5,6 @@ import time
 import urllib.request
 from selenium import webdriver
 from selenium.webdriver.firefox.service import Service
-from webdriver_manager.firefox import GeckoDriverManager
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -80,25 +79,6 @@ class SeleniumHandler:
         options.set_preference("browser.download.forbid_open_with", True)
         options.set_preference("pdfjs.disabled", True)  # Disable built-in PDF viewer
         options.set_preference("browser.helperApps.alwaysAsk.force", False)
-        # Add unique prefix for each worker's downloads
-        options.set_preference("browser.download.lastDir", "")  # Reset last directory
-        options.set_preference("browser.download.folderList", 2)  # Use custom directory
-        options.set_preference("browser.download.dir", self.temp_download_dir)
-        options.set_preference("browser.download.downloadDir", self.temp_download_dir)
-        options.set_preference("browser.download.defaultFolder", self.temp_download_dir)
-        # Set a unique filename prefix for this worker
-        options.set_preference("browser.download.filename_prefix", f"worker{self.worker_num}_")
-        options.set_preference("browser.download.useDownloadDir", True)
-        options.set_preference("browser.download.always_ask_before_handling_new_types", False)
-        options.set_preference("browser.download.manager.closeWhenDone", True)
-        options.set_preference("browser.download.manager.focusWhenStarting", False)
-        options.set_preference("browser.download.manager.showAlertOnComplete", False)
-        options.set_preference("browser.download.manager.useWindow", False)
-        options.set_preference("browser.download.panel.shown", True)
-        options.set_preference("browser.download.saveLinkAsFilenameTimeout", 0)
-        options.set_preference("browser.download.forbid_open_with", True)
-        options.set_preference("pdfjs.disabled", True)  # Disable built-in PDF viewer
-        options.set_preference("browser.helperApps.alwaysAsk.force", False)
         options.set_preference("browser.helperApps.neverAsk.saveToDisk", 
             "image/jpeg,image/png,image/jpg,image/webp,video/mp4,video/webm,video/x-matroska,"
             "video/quicktime,video/x-msvideo,video/x-flv,application/x-mpegURL,"
@@ -126,9 +106,8 @@ class SeleniumHandler:
         for pref, value in ublock_preferences.items():
             options.set_preference(pref, value)
 
-        # Configure Selenium WebDriver
-        gecko_path = GeckoDriverManager().install()
-        service = Service(gecko_path)
+        # Configure Selenium WebDriver using system geckodriver
+        service = Service('geckodriver')
         self.driver = webdriver.Firefox(service=service, options=options)
 
         # Install uBlock Origin from local file
@@ -275,7 +254,8 @@ class SeleniumHandler:
                 raise
             if str(e) == "not_photo" and photos_only:
                 raise Exception("Skipping non-photo content")
-            self._log(f"\t-> MusicalDown failed, trying SnapTik...")
+            if self.verbose:
+                self._log(f"\t-> MusicalDown failed, trying SnapTik...")
             try:
                 # Try snaptik as fallback
                 self._try_snaptik_download(url, output_folder, photos_only)
@@ -353,6 +333,48 @@ class SeleniumHandler:
                     time.sleep(0.5)  # Brief pause after clicking
         except:
             pass
+
+    def _download_with_curl(self, download_url, output_path, video_id_suffix, url):
+        """Download a file using curl to temp directory first, then move to final location."""
+        # First download to temp directory with worker-specific name
+        temp_filename = f"worker{self.worker_num}_{video_id_suffix}.mp4"
+        temp_path = os.path.join(self.temp_download_dir, temp_filename)
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Download using curl to temp location
+        cmd = ["curl", "-L", "-s", download_url, "-o", temp_path]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            if "[Errno 92] Illegal byte sequence" in result.stderr:
+                simple_filename = f"{video_id_suffix.strip()}.mp4"
+                if simple_filename.startswith('.'):
+                    simple_filename = simple_filename[1:]
+                simple_output_path = os.path.join(os.path.dirname(output_path), simple_filename)
+                temp_path = os.path.join(self.temp_download_dir, simple_filename)
+                result = subprocess.run(["curl", "-L", "-s", download_url, "-o", temp_path],
+                                    capture_output=True, text=True)
+                if result.returncode != 0:
+                    raise Exception(f"Curl download failed with error: {result.stderr}")
+                output_path = simple_output_path
+            else:
+                raise Exception(f"Curl download failed with error: {result.stderr}")
+        
+        # Check if downloaded file is empty with retries
+        self._check_file_size_with_retries(temp_path, url, verbose=self.verbose)
+        
+        # Move from temp to final location
+        try:
+            os.rename(temp_path, output_path)
+        except OSError as e:
+            # If rename fails (e.g. across devices), try copy+delete
+            import shutil
+            shutil.copy2(temp_path, output_path)
+            os.remove(temp_path)
+        
+        return output_path
 
     def _try_snaptik_download(self, url, output_folder, photos_only=False):
         """
@@ -477,30 +499,7 @@ class SeleniumHandler:
                         filename = clean_filename(f"{username[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
                     
                     download_path = os.path.join(output_folder, filename)
-                    
-                    # Create output directory if it doesn't exist
-                    os.makedirs(os.path.dirname(download_path), exist_ok=True)
-                    
-                    # Download using curl
-                    cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
-                    result = subprocess.run(cmd, capture_output=True, text=True)
-                    
-                    if result.returncode != 0:
-                        if "[Errno 92] Illegal byte sequence" in result.stderr:
-                            simple_filename = f"{video_id_suffix.strip()}.mp4"
-                            if simple_filename.startswith('.'):
-                                simple_filename = simple_filename[1:]
-                            simple_download_path = os.path.join(output_folder, simple_filename)
-                            result = subprocess.run(["curl", "-L", "-s", download_url, "-o", simple_download_path],
-                                                capture_output=True, text=True)
-                            if result.returncode != 0:
-                                raise Exception(f"Curl download failed with error: {result.stderr}")
-                            download_path = simple_download_path
-                        else:
-                            raise Exception(f"Curl download failed with error: {result.stderr}")
-                    
-                    # Check if downloaded file is empty with retries
-                    self._check_file_size_with_retries(download_path, url, verbose=self.verbose)
+                    download_path = self._download_with_curl(download_url, download_path, video_id_suffix, url)
                     return
                 except Exception as e:
                     self._log(f"\t-> Failed at: Video download process on SnapTik")
@@ -547,30 +546,7 @@ class SeleniumHandler:
                         filename = clean_filename(f"{username[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
                     
                     download_path = os.path.join(output_folder, filename)
-                    
-                    # Create output directory if it doesn't exist
-                    os.makedirs(os.path.dirname(download_path), exist_ok=True)
-                    
-                    # Download using curl
-                    cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
-                    result = subprocess.run(cmd, capture_output=True, text=True)
-                    
-                    if result.returncode != 0:
-                        if "[Errno 92] Illegal byte sequence" in result.stderr:
-                            simple_filename = f"{video_id_suffix.strip()}.mp4"
-                            if simple_filename.startswith('.'):
-                                simple_filename = simple_filename[1:]
-                            simple_download_path = os.path.join(output_folder, simple_filename)
-                            result = subprocess.run(["curl", "-L", "-s", download_url, "-o", simple_download_path],
-                                                capture_output=True, text=True)
-                            if result.returncode != 0:
-                                raise Exception(f"Curl download failed with error: {result.stderr}")
-                            download_path = simple_download_path
-                        else:
-                            raise Exception(f"Curl download failed with error: {result.stderr}")
-                    
-                    # Check if downloaded file is empty with retries
-                    self._check_file_size_with_retries(download_path, url, verbose=self.verbose)
+                    download_path = self._download_with_curl(download_url, download_path, video_id_suffix, url)
                     return
                 except Exception as e:
                     self._log(f"\t-> Failed at: Photo download process on SnapTik")
@@ -612,8 +588,9 @@ class SeleniumHandler:
 
             raise Exception(f"No download started after {MAX_WAIT_TIME_SHORT} seconds")
         except Exception as e:
-            self._log(f"\t-> Failed at: Photo download process for {url}")
-            self._log(f"\t-> Error details: {str(e)}")
+            if self.verbose:
+                self._log(f"\t-> Failed at: Photo download process for {url}")
+                self._log(f"\t-> Error details: {str(e)}")
             raise
 
     def _handle_video_download(self, url, output_folder, video_id_suffix):
@@ -664,30 +641,7 @@ class SeleniumHandler:
                 filename = clean_filename(f"{uploader[:MAX_FILENAME_LENGTH]}{video_id_suffix}.mp4")
             
             download_path = os.path.join(output_folder, filename)
-            
-            # Create output directory if it doesn't exist
-            os.makedirs(os.path.dirname(download_path), exist_ok=True)
-            
-            # Download using curl
-            cmd = ["curl", "-L", "-s", download_url, "-o", download_path]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                if "[Errno 92] Illegal byte sequence" in result.stderr:
-                    simple_filename = f"{video_id_suffix.strip()}.mp4"
-                    if simple_filename.startswith('.'):
-                        simple_filename = simple_filename[1:]
-                    simple_download_path = os.path.join(output_folder, simple_filename)
-                    result = subprocess.run(["curl", "-L", "-s", download_url, "-o", simple_download_path],
-                                         capture_output=True, text=True)
-                    if result.returncode != 0:
-                        raise Exception(f"Curl download failed with error: {result.stderr}")
-                    download_path = simple_download_path
-                else:
-                    raise Exception(f"Curl download failed with error: {result.stderr}")
-            
-            # Check if downloaded file is empty with retries
-            self._check_file_size_with_retries(download_path, url, verbose=self.verbose)
+            download_path = self._download_with_curl(download_url, download_path, video_id_suffix, url)
 
         except Exception as e:
             if str(e) == "private":
@@ -712,16 +666,7 @@ class SeleniumHandler:
         try:
             # First verify the downloaded file exists and has content
             if not os.path.exists(downloaded_file):
-                # Try looking for file with worker prefix
-                worker_prefix = f"worker{self.worker_num}_"
-                downloaded_file_with_prefix = os.path.join(
-                    os.path.dirname(downloaded_file),
-                    worker_prefix + os.path.basename(downloaded_file)
-                )
-                if os.path.exists(downloaded_file_with_prefix):
-                    downloaded_file = downloaded_file_with_prefix
-                else:
-                    raise Exception("Downloaded file does not exist")
+                raise Exception("Downloaded file does not exist")
             
             file_size = os.path.getsize(downloaded_file)
             if not is_file_size_valid(file_size):
@@ -801,13 +746,9 @@ class SeleniumHandler:
         base_name = os.path.basename(file_path)
         dir_path = os.path.dirname(file_path)
         video_id = extract_video_id(url)
-        worker_prefix = f"worker{self.worker_num}_"
         
         # First check if there's a .part file
-        part_files = [f for f in os.listdir(dir_path) 
-                     if f.endswith('.part') and 
-                     (base_name.split('_')[-1] in f or 
-                      base_name.split('_')[-1] in f.replace(worker_prefix, ''))]
+        part_files = [f for f in os.listdir(dir_path) if f.endswith('.part') and base_name.split('_')[-1] in f]
         
         if part_files or base_name.endswith('.part'):
             # Use max wait time for .part files
@@ -816,23 +757,14 @@ class SeleniumHandler:
             last_size = 0
             
             while time.time() - start_time < MAX_WAIT_TIME_PART_FILE:
-                current_part_files = [f for f in os.listdir(dir_path) 
-                                    if f.endswith('.part') and 
-                                    (base_name.split('_')[-1] in f or 
-                                     base_name.split('_')[-1] in f.replace(worker_prefix, ''))]
+                current_part_files = [f for f in os.listdir(dir_path) if f.endswith('.part') and base_name.split('_')[-1] in f]
                 
                 # If .part no longer exists, check the main file
                 if not current_part_files and not base_name.endswith('.part'):
-                    # Check both with and without worker prefix
-                    file_to_check = file_path
-                    if not os.path.exists(file_to_check):
-                        file_to_check = os.path.join(dir_path, worker_prefix + base_name)
-                    
-                    if os.path.exists(file_to_check):
-                        current_size = os.path.getsize(file_to_check)
-                        if is_file_size_valid(current_size):
-                            self._log(f"{video_id} has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
-                            return True
+                    current_size = os.path.getsize(file_path)
+                    if is_file_size_valid(current_size):
+                        self._log(f"{video_id} has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
+                        return True
                 else:
                     # Check size of part file
                     part_file = current_part_files[0] if current_part_files else base_name
@@ -854,17 +786,11 @@ class SeleniumHandler:
         else:
             # No .part file found, use standard retry logic
             for attempt in range(max_retries):
-                # Check both with and without worker prefix
-                file_to_check = file_path
-                if not os.path.exists(file_to_check):
-                    file_to_check = os.path.join(dir_path, worker_prefix + base_name)
-                
-                if os.path.exists(file_to_check):
-                    current_size = os.path.getsize(file_to_check)
-                    if is_file_size_valid(current_size):
-                        if verbose:
-                            self._log(f"{video_id} has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
-                        return True
+                current_size = os.path.getsize(file_path)
+                if is_file_size_valid(current_size):
+                    if verbose:
+                        self._log(f"{video_id} has been successfully downloaded: {current_size / 1_000_000:.2f} MB")
+                    return True
                 
                 if verbose:
                     self._log(f"Retry {attempt + 1}/{max_retries}: {video_id} ({base_name}) is still empty, waiting...")

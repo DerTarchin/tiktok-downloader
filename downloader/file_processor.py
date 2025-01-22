@@ -36,11 +36,6 @@ def selenium_worker(selenium_handler, file_handler, yt_dlp_handler, worker_num):
             try:
                 url, collection_name, error_msg, output_folder = selenium_queue.get(timeout=1)
             except:
-                # Reset counters if queue is empty
-                if selenium_queue.empty():
-                    with selenium_counter_lock:
-                        selenium_processed_items = 0
-                        selenium_total_items = 0
                 continue
                 
             try:
@@ -67,7 +62,7 @@ def selenium_worker(selenium_handler, file_handler, yt_dlp_handler, worker_num):
                         log_selenium_worker(worker_num, f"❌\tPrivate video: {url}")
                         file_handler.log_error(url, error_file_path, is_private=True)
                     else:
-                        log_selenium_worker(worker_num, f"❌\tSelenium failed: {str(e)}")
+                        log_selenium_worker(worker_num, f"❌\t[{extract_video_id(url)}] Selenium failed:\n{str(e)}")
                         file_handler.log_error(url, error_file_path)
                         
             except Exception as e:
@@ -76,6 +71,11 @@ def selenium_worker(selenium_handler, file_handler, yt_dlp_handler, worker_num):
                 file_handler.log_error(url, error_file_path)
             finally:
                 selenium_queue.task_done()  # Only call task_done once, in finally block
+                # Reset counters if queue is empty after processing this item
+                if selenium_queue.empty():
+                    with selenium_counter_lock:
+                        selenium_processed_items = 0
+                        selenium_total_items = 0
         except Exception as e:
             log_selenium_worker(worker_num, f"❌\tSelenium worker error: {str(e)}")
 
@@ -128,11 +128,6 @@ def yt_dlp_worker(yt_dlp_handler, file_handler, worker_num, verbose=False):
             try:
                 url, output_folder, collection_name, callback = yt_dlp_queue.get(timeout=1)
             except:
-                # Reset counters if queue is empty
-                if yt_dlp_queue.empty():
-                    with yt_dlp_counter_lock:
-                        yt_dlp_processed_items = 0
-                        yt_dlp_total_items = 0
                 continue
                 
             try:
@@ -166,6 +161,11 @@ def yt_dlp_worker(yt_dlp_handler, file_handler, worker_num, verbose=False):
                     callback(url, False, str(e), 0.0)
             finally:
                 yt_dlp_queue.task_done()
+                # Reset counters if queue is empty after processing this item
+                if yt_dlp_queue.empty():
+                    with yt_dlp_counter_lock:
+                        yt_dlp_processed_items = 0
+                        yt_dlp_total_items = 0
                 
         except Exception as e:
             log_yt_dlp_worker(worker_num, f"Worker error: {str(e)}")
@@ -186,6 +186,7 @@ def start_yt_dlp_threads(yt_dlp_handler, file_handler, max_concurrent=3, verbose
         )
         thread.start()
         yt_dlp_threads.append(thread)
+        log_yt_dlp_worker(i + 1, f"Started yt-dlp worker")
 
 def queue_yt_dlp_download(url, output_folder, collection_name, callback=None):
     """Queue a URL for yt-dlp download and update counter."""
@@ -206,7 +207,7 @@ def wait_for_yt_dlp_queue():
     yt_dlp_queue.join()
 
 def process_file(file_path, index, total_files, file_handler, selenium_handlers, 
-                yt_dlp_handler, sync_handler, skip_private=False, skip_sync=False, verbose=False):
+                yt_dlp_handler, sync_handler, skip_private=False, skip_sync=False, verbose=False, max_concurrent=3):
     """
     Process a single text file containing URLs to download.
     
@@ -221,6 +222,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handlers,
         skip_private: Whether to skip known private videos
         skip_sync: Whether to skip syncing the processed folder
         verbose: Whether to print verbose output
+        max_concurrent: Maximum number of concurrent yt-dlp downloads
     """
 
     # Get collection name from file name, handling multiple extensions
@@ -249,7 +251,7 @@ def process_file(file_path, index, total_files, file_handler, selenium_handlers,
     
     # Start yt-dlp worker threads if not already running
     if not yt_dlp_threads:
-        start_yt_dlp_threads(yt_dlp_handler, file_handler, verbose=verbose)
+        start_yt_dlp_threads(yt_dlp_handler, file_handler, max_concurrent=max_concurrent, verbose=verbose)
     
     try:
         # Read URLs from file
@@ -327,13 +329,12 @@ def process_file(file_path, index, total_files, file_handler, selenium_handlers,
             for url in sorted(video_urls):
                 queue_yt_dlp_download(url, output_folder, collection_name, handle_result)
             
-            # Wait for all downloads to complete
-            wait_for_yt_dlp_queue()
             if verbose:
                 print("yt-dlp workers finished")
                 
         # Wait for all selenium downloads to complete before returning
         print("\nWaiting for queued downloads to complete...")
+        wait_for_yt_dlp_queue()
         wait_for_selenium_queue()
         
     except Exception as e:
