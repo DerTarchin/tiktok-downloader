@@ -1,0 +1,17 @@
+# Python packages
+python-dotenv>=1.0.0
+selenium>=4.15.2
+webdriver-manager>=4.0.1
+yt-dlp>=2023.11.16
+requests>=2.31.0
+
+# System dependencies (install via package manager)
+# Firefox browser: Required for Selenium
+#   macOS: brew install firefox
+#   Ubuntu: sudo apt install firefox
+#   Windows: Download from https://www.mozilla.org/firefox/
+#
+# rclone: Required for Google Drive sync
+#   macOS: brew install rclone
+#   Ubuntu: sudo apt install rclone
+#   Windows: Download from https://rclone.org/downloads/ 

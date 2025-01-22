@@ -61,28 +61,97 @@ The main downloader script that downloads TikTok videos and photos using both yt
 ### Requirements:
 
 - Python 3.x
-- Firefox browser (geckodriver)
-- yt-dlp
-- selenium
-- webdriver_manager
-- python-dotenv
+- Firefox browser (for Selenium)
+- rclone (for Google Drive sync)
+- Python packages (see requirements.txt)
 
-### Environment Setup:
+### Multi-Computer Setup
 
-1. Copy `.env.template` to `.env`:
+To use this project on multiple computers:
+
+1. **Install System Dependencies**:
+
+   **Firefox Browser**:
+
+   - macOS: `brew install firefox`
+   - Ubuntu: `sudo apt install firefox`
+   - Windows: Download from https://www.mozilla.org/firefox/
+
+   **rclone**:
+
+   - macOS: `brew install rclone`
+   - Ubuntu: `sudo apt install rclone`
+   - Windows: Download from https://rclone.org/downloads/
+
+2. **Python Environment Setup**:
 
    ```bash
-   cp .env.template .env
+   # Clone/copy the repository
+   git clone <repository-url>
+   cd tiktok-downloader
+
+   # Create virtual environment (recommended)
+   python -m venv venv
+
+   # Activate virtual environment (recommended)
+   # On macOS/Linux:
+   source venv/bin/activate
+   # On Windows:
+   .\venv\Scripts\activate
+
+   # Install Python dependencies
+   pip install -r requirements.txt
    ```
 
-2. Edit `.env` and update the following variables:
+3. **rclone Setup**:
 
-   - `TIKTOK_COOKIES`: Your TikTok session cookies
-   - `TIKTOK_DEVICE_ID`: Your device ID
-   - `TIKTOK_ODIN_ID`: Your Odin ID
-   - Other variables can be left as default unless you need to customize them
+   If setting up from scratch:
 
-3. Make sure to keep your `.env` file private and never commit it to version control.
+   ```bash
+   # Configure rclone (interactive setup)
+   rclone config
+
+   # Follow prompts to:
+   # 1. Select "New remote"
+   # 2. Name it "gdrive"
+   # 3. Choose "Google Drive" as storage type
+   # 4. Follow OAuth setup steps
+   ```
+
+   To copy existing rclone config:
+
+   ```bash
+   # Find existing config location:
+   rclone config file
+
+   # Config is usually located at:
+   # Windows: %UserProfile%\.config\rclone\rclone.conf
+   # macOS/Linux: ~/.config/rclone/rclone.conf
+
+   # Copy this file to the same location on your new computer
+   ```
+
+4. **Environment Variables**:
+
+   ```bash
+   # Copy template
+   cp .env.template .env
+
+   # Edit .env with your credentials
+   nano .env  # or use any text editor
+   ```
+
+### Maintenance
+
+When adding new Python packages:
+
+```bash
+# Update requirements.txt with all installed packages
+pip freeze > requirements.txt
+
+# Or manually add specific packages
+echo "package-name>=version" >> requirements.txt
+```
 
 ### How to Use:
 
