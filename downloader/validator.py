@@ -2,7 +2,8 @@
 
 import os
 import subprocess
-from .utils import extract_video_id
+from .utils import extract_video_id, is_file_size_valid
+
 
 class Validator:
     def __init__(self, gdrive_base_path="gdrive:/TikTok Archives"):
@@ -119,7 +120,7 @@ class Validator:
                         file_size = os.path.getsize(file_path)
                         
                         if file_id.isdigit():
-                            if file_size == 0:
+                            if not is_file_size_valid(file_size):
                                 empty_files[file_id] = f"(local) {filename}"
                             else:
                                 downloaded_ids.add(file_id)
@@ -154,16 +155,16 @@ class Validator:
                                 except ValueError:
                                     # If first part isn't a number, treat the whole line as filename
                                     filename = line
-                                    file_size = 1  # Assume non-zero size since file exists
+                                    file_size = -1  # Assume non-zero size since file exists
                             else:
                                 filename = line
-                                file_size = 1  # Assume non-zero size since file exists
+                                file_size = -1  # Assume non-zero size since file exists
                             
                             if filename.lower().endswith(video_extensions):
                                 file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
                                 
                                 if file_id.isdigit():
-                                    if file_size == 0:
+                                    if file_size != -1 and not is_file_size_valid(file_size):
                                         empty_files[file_id] = f"(remote) {filename}"
                                     else:
                                         downloaded_ids.add(file_id)
@@ -230,7 +231,7 @@ class Validator:
                     print(f"\t{vid_id}")
                     
             if empty_files:
-                print(f"{len(empty_files):,} empty (zero-byte) files detected:")
+                print(f"{len(empty_files):,} empty files detected:")
                 for vid_id, filename in empty_files.items():
                     print(f"\t{vid_id}, {filename}")
             

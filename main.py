@@ -1,5 +1,6 @@
 """Main script for TikTok video downloader."""
 
+import argparse
 import os
 import sys
 from downloader.file_handler import FileHandler
@@ -9,38 +10,42 @@ from downloader.sync_handler import SyncHandler
 from downloader.validator import Validator
 from downloader.utils import (get_highest_group_number, write_and_process_urls, 
                             split_into_groups, print_final_summary)
-from downloader.file_processor import process_file, process_error_logs, stop_selenium_threads
+from downloader.file_processor import process_file, process_error_logs, stop_selenium_threads, stop_yt_dlp_threads
 import subprocess
 
 
 def main():
-    # Check for correct usage
-    if len(sys.argv) < 2:
-        print("Usage: python script.py <input_directory_or_file> [--errors-only] [--disable-headless] [--combine-uncategorized] [--concurrent N] [--skip-validation] [--skip-private] [--skip-sync] [--selenium-half]")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='TikTok video downloader script.')
+    parser.add_argument('input_path', help='Input directory or file')
+    parser.add_argument('--errors-only', action='store_true', help='Process only error logs')
+    parser.add_argument('--disable-headless', action='store_true', help='Disable headless mode for Selenium')
+    parser.add_argument('--combine-uncategorized', action='store_true', help='Combine uncategorized videos')
+    parser.add_argument('--concurrent', type=int, default=5, help='Number of concurrent downloads')
+    parser.add_argument('--skip-validation', action='store_true', help='Skip validation step')
+    parser.add_argument('--skip-private', action='store_true', help='Skip private videos')
+    parser.add_argument('--skip-sync', action='store_true', help='Skip synchronization step')
+    parser.add_argument('--selenium-half', action='store_true', help='Use half the concurrency for Selenium')
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
+
+    args = parser.parse_args()
 
     # Get the input path and check for flags
-    input_path = sys.argv[1]
-    errors_only = "--errors-only" in sys.argv
-    combine_uncategorized = "--combine-uncategorized" in sys.argv
-    headless = "--disable-headless" not in sys.argv
-    skip_validation = "--skip-validation" in sys.argv
-    skip_private = "--skip-private" in sys.argv
-    skip_sync = "--skip-sync" in sys.argv
+    input_path = args.input_path
+    errors_only = args.errors_only
+    combine_uncategorized = args.combine_uncategorized
+    headless = not args.disable_headless
+    skip_validation = args.skip_validation
+    skip_private = args.skip_private
+    skip_sync = args.skip_sync
+    verbose = args.verbose
     
     # Parse concurrent downloads setting
-    concurrent_downloads = 5 # default concurrent
-    for i, arg in enumerate(sys.argv):
-        if arg == "--concurrent" and i + 1 < len(sys.argv):
-            try:
-                concurrent_downloads = int(sys.argv[i + 1])
-                if concurrent_downloads < 1:
-                    concurrent_downloads = 1
-            except ValueError:
-                print("Warning: Invalid concurrent downloads value. Using default (2).")
+    concurrent_downloads = args.concurrent
+    if concurrent_downloads < 1:
+        concurrent_downloads = 1
     
     # Calculate selenium concurrency
-    selenium_half = "--selenium-half" in sys.argv
+    selenium_half = args.selenium_half
     selenium_concurrent = concurrent_downloads // 2 if selenium_half else concurrent_downloads
     if selenium_concurrent < 1:
         selenium_concurrent = 1
@@ -53,21 +58,21 @@ def main():
         base_dir = os.path.dirname(input_path)
     else:
         base_dir = input_path
+    
+    total_videos = file_handler.count_unique_videos()
+    print(f"\nFound {total_videos:,} unique videos to process\n")
         
     # Create multiple selenium handlers with unique temp directories
     selenium_handlers = []
     for i in range(selenium_concurrent):
         temp_download_dir = os.path.join(base_dir, f"_tmp_{i+1}")
         os.makedirs(temp_download_dir, exist_ok=True)
-        selenium_handlers.append(SeleniumHandler(temp_download_dir, headless=headless, worker_num=i+1))
+        selenium_handlers.append(SeleniumHandler(temp_download_dir, headless=headless, worker_num=i+1, verbose=verbose))
     
     yt_dlp_handler = YtDlpHandler(max_concurrent=concurrent_downloads)
     sync_handler = SyncHandler()
     validator = Validator()
 
-    total_videos = file_handler.count_unique_videos()
-    print(f"\nFound {total_videos:,} unique videos to process")
-    
     try:
         # Start up all selenium handlers
         for handler in selenium_handlers:
@@ -92,7 +97,9 @@ def main():
                 all_saves_path = os.path.join(input_path, file_handler.all_saves_file)
                 group_files = []
                 if os.path.exists(all_saves_path):
-                    print(f"\nPre-processing {file_handler.all_saves_file}")
+                    if verbose:
+                        print(f"\nPre-processing {file_handler.all_saves_file}")
+
                     with open(all_saves_path, "r") as f:
                         urls = [url.strip() for url in f.readlines() if url.strip()]
                     
@@ -102,13 +109,14 @@ def main():
                             start_group = get_highest_group_number(input_path, file_handler.all_saves_name)
                             
                             # Pre-generate all group files
-                            group_files = split_into_groups(urls, input_path, file_handler, start_group)
-                            if len(group_files) > 0:
+                            group_files = split_into_groups(urls, input_path, file_handler, start_group, verbose=verbose)
+                            if len(group_files) > 0 and verbose:
                                 if any(os.path.getsize(f) == 0 for f in group_files):
                                     print("Creating new group files...")
                                 else:
                                     print("Using existing group files...")
-                            print(f"Found {len(group_files):,} group files")
+                            if verbose:
+                                print(f"Found {len(group_files):,} group files")
                 
                 # If it's a directory, process all text files in the directory
                 text_files = [f for f in os.listdir(input_path) 
@@ -125,12 +133,12 @@ def main():
                     if is_all_saves and "Group " in x:
                         try:
                             group_num = int(x.split("Group ")[1].split(")")[0])
-                            return (is_all_saves, group_num)
+                            return (is_all_saves, group_num, '')  # Empty string for consistent tuple shape
                         except (ValueError, IndexError):
                             pass
                     
                     # Otherwise sort by lowercase filename
-                    return (is_all_saves, x.lower())
+                    return (is_all_saves, float('inf'), x.lower())  # Use float('inf') for non-group files
                 
                 text_files.sort(key=sort_key)
                 group_files.sort(key=sort_key)
@@ -151,7 +159,8 @@ def main():
                                   file_handler, selenium_handlers, 
                                   yt_dlp_handler, sync_handler,
                                   skip_private=skip_private,
-                                  skip_sync=skip_sync)
+                                  skip_sync=skip_sync,
+                                  verbose=verbose)
 
                 # Finally, process the uncategorized groups if they were created
                 if group_files:
@@ -163,7 +172,8 @@ def main():
                                   file_handler, selenium_handlers,
                                   yt_dlp_handler, sync_handler,
                                   skip_private=skip_private,
-                                  skip_sync=skip_sync)
+                                  skip_sync=skip_sync,
+                                  verbose=verbose)
                 elif os.path.exists(all_saves_path) and combine_uncategorized:
                     # Original behavior for non-split processing
                     remaining_uncategorized = os.path.join(input_path, 
@@ -173,7 +183,8 @@ def main():
                                         yt_dlp_handler, sync_handler,
                                         None, total_files,
                                         skip_private=skip_private,
-                                        skip_sync=skip_sync)
+                                        skip_sync=skip_sync,
+                                        verbose=verbose)
 
             elif os.path.isfile(input_path):
                 # If it's a single file, process it directly
@@ -182,7 +193,8 @@ def main():
                               file_handler, selenium_handlers,
                               yt_dlp_handler, sync_handler,
                               skip_private=skip_private,
-                              skip_sync=skip_sync)
+                              skip_sync=skip_sync,
+                              verbose=verbose)
                 else:
                     print(f"File {input_path} is not a .txt file. Skipping.")
             else:
@@ -215,25 +227,47 @@ def main():
             
     except KeyboardInterrupt:
         print("\nProcess interrupted by user. Cleaning up...")
+        # First stop all worker threads
+        stop_selenium_threads()
+        stop_yt_dlp_threads()
+        
+        # Then shutdown each handler with proper cleanup
         for handler in selenium_handlers:
-            handler.cleanup()
+            try:
+                handler.shutdown()
+            except Exception as e:
+                print(f"\nWarning: Error during handler shutdown: {e}")
+        
         sys.exit(1)
     except Exception as e:
         print(f"\nError: {str(e)}")
+        # First stop all worker threads
+        stop_selenium_threads()
+        stop_yt_dlp_threads()
+        
+        # Then shutdown each handler with proper cleanup
         for handler in selenium_handlers:
-            handler.cleanup()
+            try:
+                handler.shutdown()
+            except Exception as e:
+                print(f"\nWarning: Error during handler shutdown: {e}")
+        
         sys.exit(1)
     
     finally:
         # Ensure sync thread is stopped
         sync_handler.stop_sync_thread()
         
-        # Stop selenium worker threads
+        # Stop worker threads
         stop_selenium_threads()
+        stop_yt_dlp_threads()
         
-        # Shutdown all selenium handlers
+        # Shutdown all selenium handlers with proper cleanup
         for handler in selenium_handlers:
-            handler.shutdown()
+            try:
+                handler.shutdown()
+            except Exception as e:
+                print(f"\nWarning: Error during handler shutdown: {e}")
             
         yt_dlp_handler.shutdown()  # Clean up thread pool
         
