@@ -105,8 +105,11 @@ python main.py path/to/directory --errors-only
 # Disable headless mode (show browser)
 python main.py path/to/directory --disable-headless
 
-# Control concurrent downloads (default: 5, max: 5)
+# Control concurrent downloads (default: 5)
 python main.py path/to/directory --concurrent 4
+
+# Control concurrent Selenium downloads (defaults to --concurrent value)
+python main.py path/to/directory --concurrent-selenium 3
 
 # Skip download validation step
 python main.py path/to/directory --skip-validation
@@ -114,11 +117,17 @@ python main.py path/to/directory --skip-validation
 # Skip private videos
 python main.py path/to/directory --skip-private
 
+# Skip synchronization step
+python main.py path/to/directory --skip-sync
+
 # Keep all uncategorized videos in one file (overrides default group splitting)
 python main.py path/to/directory --combine-uncategorized
 
+# Enable verbose output
+python main.py path/to/directory --verbose
+
 # Combine multiple flags
-python main.py path/to/directory --disable-headless --concurrent 4 --skip-validation
+python main.py path/to/directory --disable-headless --concurrent 4 --skip-validation --verbose
 ```
 
 The script will:
@@ -129,6 +138,7 @@ The script will:
 4. Save successful downloads to the created folder
 5. Create error logs for failed downloads
 6. Track successful downloads to avoid duplicates
+7. Automatically sync to Google Drive (unless --skip-sync is used)
 
 ### Features:
 
@@ -198,6 +208,12 @@ A utility script to fetch all collections from a TikTok user and download their 
 ```bash
 # Fetch all collections for a user
 python scripts/fetch_user_collections.py OUTPUT_DIR
+
+# Add delay between requests (in seconds)
+python scripts/fetch_user_collections.py OUTPUT_DIR --delay 1
+
+# Use existing directory.log file instead of fetching collections
+python scripts/fetch_user_collections.py OUTPUT_DIR --directory path/to/directory.log
 ```
 
 The script will:
@@ -243,6 +259,9 @@ python scripts/download_slideshows.py path/to/directory
 
 # Disable headless mode (show browser)
 python scripts/download_slideshows.py path/to/directory --disable-headless
+
+# Control concurrent downloads (default: 5)
+python scripts/download_slideshows.py path/to/directory --concurrent 3
 ```
 
 The script will:
@@ -312,20 +331,23 @@ The script will:
 
 ### fix_collection_issues.py
 
-A utility script to validate and fix issues with TikTok video collections.
+A utility script to validate and fix TikTok downloads.
 
 ```bash
-# Validate and fix issues (dry run)
-python scripts/fix_collection_issues.py path/to/directory --dry-run
-
-# Validate and fix issues (apply changes)
+# Basic usage
 python scripts/fix_collection_issues.py path/to/directory
 
-# Skip moving videos between collections
+# Show what would be done without making changes
+python scripts/fix_collection_issues.py path/to/directory --dry-run
+
+# Skip moving videos to fix missing entries, just delete extras
 python scripts/fix_collection_issues.py path/to/directory --skip-move
 
-# Use custom Google Drive path
-python scripts/fix_collection_issues.py path/to/directory --gdrive-base-path "gdrive:/My TikToks"
+# Delete extra videos found in remote storage
+python scripts/fix_collection_issues.py path/to/directory --delete-extra
+
+# Specify custom Google Drive base path
+python scripts/fix_collection_issues.py path/to/directory --gdrive-base-path "gdrive:/Custom Path"
 ```
 
 The script will:
@@ -402,7 +424,7 @@ The script will:
 
 ### split_links.py
 
-A utility script to split a text file containing URLs into multiple files with a maximum number of lines per file.
+A utility script to split a text file containing URLs into multiple files.
 
 ```bash
 # Basic usage (splits into files of 500 lines each)
@@ -433,7 +455,7 @@ python scripts/remove_extensionless_files.py username --dry-run
 
 ### extract_post_links.py
 
-A utility script to extract TikTok video links from text files containing TikTok metadata and optionally download videos from tiktokv.us URLs.
+A utility script to extract TikTok video links from text files containing TikTok metadata.
 
 ```bash
 # Extract links from a single file (creates links.txt)
@@ -445,7 +467,10 @@ python scripts/extract_post_links.py file1.txt file2.txt file3.txt
 # Save links to custom filename
 python scripts/extract_post_links.py metadata.txt -o my_links.txt
 
-# Extract links and download videos
+# Set minimum file size in KB (default: 500)
+python scripts/extract_post_links.py metadata.txt --min-size 1000
+
+# Download videos from extracted URLs
 python scripts/extract_post_links.py metadata.txt --download
 ```
 
@@ -466,20 +491,17 @@ The script will:
 
 ### sync_to_remote.py
 
-A utility script to sync a directory to Google Drive using the same logic as the main script's final sync. Handles both video folders and text/log files.
+A utility script to sync a directory to remote Google Drive using the same logic as the main script's final sync.
 
 ```bash
-# Sync current directory
-python scripts/sync_to_remote.py
+# Basic usage
+python scripts/sync_to_remote.py path/to/directory
 
-# Sync specific directory
-python scripts/sync_to_remote.py --path /path/to/dir
+# Show what would be synced without making changes
+python scripts/sync_to_remote.py path/to/directory --dry-run
 
-# Preview what would be synced without actually syncing
-python scripts/sync_to_remote.py --dry-run
-
-# Use different remote base path
-python scripts/sync_to_remote.py --gdrive-base "gdrive:/My Archives"
+# Specify custom Google Drive base path
+python scripts/sync_to_remote.py path/to/directory --gdrive-base "gdrive:/Custom Path"
 ```
 
 The script will:
