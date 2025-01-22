@@ -342,19 +342,19 @@ The script will:
 - Handle private videos gracefully
 - Clean up temporary files after completion
 
-### download_tiktok_audio.py
+### download_sounds.py
 
 A utility script to extract and download TikTok audio files from a text file containing sound links.
 
 ```bash
 # Extract links only (saves to links.txt in same directory)
-python scripts/download_tiktok_audio.py input_file.txt
+python scripts/download_sounds.py input_file.txt
 
 # Download audio files (saves to Sounds directory)
-python scripts/download_tiktok_audio.py input_file.txt --download
+python scripts/download_sounds.py input_file.txt --download
 
 # Control number of concurrent downloads (default: 5)
-python scripts/download_tiktok_audio.py input_file.txt --download --concurrent 3
+python scripts/download_sounds.py input_file.txt --download --concurrent 3
 ```
 
 The script will:
@@ -398,25 +398,25 @@ The script will:
   - Preserve the order of remaining URLs in group files
 - Report the total number of duplicates removed
 
-### fix_collection_issues.py
+### fix_issues.py
 
 A utility script to validate and fix TikTok downloads.
 
 ```bash
 # Basic usage
-python scripts/fix_collection_issues.py path/to/directory
+python scripts/fix_issues.py path/to/directory
 
 # Show what would be done without making changes
-python scripts/fix_collection_issues.py path/to/directory --dry-run
+python scripts/fix_issues.py path/to/directory --dry-run
 
 # Skip moving videos to fix missing entries, just delete extras
-python scripts/fix_collection_issues.py path/to/directory --skip-move
+python scripts/fix_issues.py path/to/directory --skip-move
 
 # Delete extra videos found in remote storage
-python scripts/fix_collection_issues.py path/to/directory --delete-extra
+python scripts/fix_issues.py path/to/directory --delete-extra
 
 # Specify custom Google Drive base path
-python scripts/fix_collection_issues.py path/to/directory --gdrive-base-path "gdrive:/Custom Path"
+python scripts/fix_issues.py path/to/directory --gdrive-base-path "gdrive:/Custom Path"
 ```
 
 The script will:
@@ -425,7 +425,9 @@ The script will:
 2. Move misplaced videos to their correct collections
 3. Remove extra videos that don't belong anywhere
 4. Clean up download logs for missing videos
-5. Handle both local and remote (Google Drive) files
+5. Delete files under 50kb (corrupted)
+6. Delete files without extensions
+7. Handle both local and remote (Google Drive) files
 
 ### parse_urls.py
 
@@ -510,18 +512,6 @@ The script will:
 - Create files named like "original_name (Part 1).txt", "original_name (Part 2).txt", etc.
 - Show progress and statistics for each file created
 
-### remove_extensionless_files.py
-
-A utility script to find and delete files without extensions in remote TikTok Archives.
-
-```bash
-# Remove files without extensions for a user
-python scripts/remove_extensionless_files.py username
-
-# Show what would be done without making changes
-python scripts/remove_extensionless_files.py username --dry-run
-```
-
 ### extract_post_links.py
 
 A utility script to extract TikTok video links from text files containing TikTok metadata.
@@ -580,3 +570,51 @@ The script will:
 3. Skip empty folders
 4. Sync text files and logs
 5. Use optimal rclone settings (20 transfers, 256M chunks)
+
+### count_videos_to_download.py
+
+A utility script to count the total number of videos to be downloaded across text files in a directory. It provides a breakdown by collection and accounts for private/unavailable videos.
+
+```bash
+# Basic usage
+python scripts/count_videos_to_download.py path/to/directory
+```
+
+### update_aliases.py
+
+A utility script to update shell aliases for all TikTok Downloader scripts in your `~/.zshrc` file. The script automatically detects the project location and updates the aliases accordingly.
+
+```bash
+# Update aliases in ~/.zshrc
+python scripts/update_aliases.py
+```
+
+The script will:
+
+1. Detect the project root directory
+2. Generate aliases for all TikTok Downloader scripts
+3. Clean up any existing TikTok Downloader aliases
+4. Add new aliases with correct paths
+5. Maintain a help command (`tthelp`) that shows all available commands with their script paths
+
+Available aliases:
+
+- `tt`: Run the main downloader script
+- `ttaudio`: Download TikTok audio files
+- `ttcollect`: Fetch user collections
+- `ttcollection`: Fetch collection videos
+- `ttcount`: Count videos to download
+- `ttdedupe`: Remove duplicate URLs
+- `ttfix`: Fix download issues
+- `ttgroupdedupe`: Remove group duplicates
+- `ttparse`: Parse and combine URLs
+- `ttphotos`: Download slideshows
+- `ttsplit`: Split URL files
+- `ttsync`: Sync to Google Drive
+- `tthelp`: Show all available commands
+
+After running the script, remember to:
+
+```bash
+source ~/.zshrc  # Apply the changes
+```

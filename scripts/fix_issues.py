@@ -15,6 +15,21 @@ from downloader.validator import Validator
 from downloader.utils import extract_video_id
 from downloader.file_handler import FileHandler
 
+# Global variables for progress tracking
+videos_processed = 0
+total_videos = 0
+last_percentage = -1
+
+def update_progress():
+    """Update and display the progress of video processing."""
+    global videos_processed, total_videos, last_percentage
+    videos_processed += 1
+    if total_videos > 0:
+        current_percentage = (videos_processed * 100) // total_videos
+        if current_percentage % 5 == 0 and current_percentage != last_percentage:
+            print(f"\nProgress: {current_percentage}% ({videos_processed:,}/{total_videos:,} videos processed)")
+            last_percentage = current_percentage
+
 def move_video(src_path, dest_path, video_id, is_remote=False):
     """Move a video file from source to destination path."""
     if is_remote:
@@ -167,7 +182,43 @@ def move_videos_batch(moves, is_remote=False, batch_size=40):
     print(f"\nBatch processing complete. {sum(results.values()):,} successful, {len(results) - sum(results.values()):,} failed")
     return results
 
+def process_files(file_type, results, args, file_handler, videos_to_move):
+    """Process files based on their type: extra, empty, or invalid."""
+    for collection, files in results[file_type].items():
+        for video_id, file_info in files.items():
+            if file_type == 'extra' and video_id in videos_to_move:
+                continue
+
+            if not args.allow_delete:
+                print(f"Skipping extra video {video_id} from {collection} (use --allow-delete to delete)")
+                update_progress()
+                continue
+
+            action = "Deleting" if file_type in ['extra', 'invalid_name'] else "Removing"
+            print(f"{action} {file_type} video {video_id} from {collection}")
+
+            filename = file_info.split(' ', 1)[1]  # Remove (local) or (remote) prefix
+            is_remote = file_info.startswith('(remote)')
+
+            if is_remote:
+                path = f"{args.gdrive_base_path}/{os.path.basename(args.input_path)}/{collection}/{filename}"
+            else:
+                path = os.path.join(args.input_path, collection, filename)
+
+            if not args.dry_run:
+                if delete_video(path, is_remote):
+                    print(f"Successfully {action.lower()}ed video {video_id}")
+                else:
+                    print(f"Failed to {action.lower()} video {video_id}")
+
+                if file_type in 'empty':
+                    remove_from_success_log(file_handler.success_log_path, video_id)
+
+                update_progress()
+
 def main():
+    global total_videos
+    
     parser = argparse.ArgumentParser(description='Validate and fix TikTok downloads')
     parser.add_argument('input_path', help='Path to the directory containing collections')
     parser.add_argument('--gdrive-base-path', default='gdrive:/TikTok Archives',
@@ -175,9 +226,9 @@ def main():
     parser.add_argument('--dry-run', action='store_true',
                       help='Show what would be done without making changes')
     parser.add_argument('--skip-move', action='store_true',
-                      help='Skip moving videos to fix missing entries, just delete extras')
-    parser.add_argument('--delete-extra', action='store_true',
-                      help='Delete extra videos found in remote storage')
+                      help='Skip moving videos to fix missing entries')
+    parser.add_argument('--allow-delete', action='store_true',
+                      help='Delete extra or corrupted videos found in remote storage')
 
     args = parser.parse_args()
 
@@ -212,19 +263,9 @@ def main():
     total_videos = (
         (len(videos_to_move) if not args.skip_move else 0) + 
         sum(len(videos) for videos in results['extra'].values()) +
-        sum(len(videos) for videos in results['empty'].values())
+        sum(len(videos) for videos in results['empty'].values()) +
+        sum(len(videos) for videos in results['invalid_name'].values())
     )
-    videos_processed = 0
-    last_percentage = -1  # Track last printed percentage to avoid duplicates
-
-    def update_progress():
-        nonlocal videos_processed, last_percentage
-        videos_processed += 1
-        if total_videos > 0:  # Only calculate percentage if we have videos to process
-            current_percentage = (videos_processed * 100) // total_videos
-            if current_percentage % 5 == 0 and current_percentage != last_percentage:
-                print(f"\nProgress: {current_percentage}% ({videos_processed:,}/{total_videos:,} videos processed)")
-                last_percentage = current_percentage
 
     print(f"\nStarting to process {total_videos:,} videos...")
 
@@ -263,34 +304,7 @@ def main():
                 del results['extra'][from_collection][video_id]
             else:
                 print(f"Failed to move video {video_id}")
-            update_progress()
-
-    # Process remaining extra videos (delete them)
-    for collection, extra_videos in results['extra'].items():
-        for video_id, file_info in extra_videos.items():
-            if video_id in videos_to_move:  # Skip if we moved this video
-                continue
-                
-            if  not args.delete_extra:
-                print(f"Skipping extra video {video_id} from {collection} (use --delete-extra to delete)")
-                update_progress()
-                continue
-
-            print(f"Deleting extra video {video_id} from {collection}")
-            filename = file_info.split(' ', 1)[1]  # Remove (local) or (remote) prefix
-            is_remote = file_info.startswith('(remote)')  # Define is_remote based on file_info prefix
-            
-            if is_remote:
-                path = f"{args.gdrive_base_path}/{os.path.basename(args.input_path)}/{collection}/{filename}"
-            else:
-                path = os.path.join(args.input_path, collection, filename)
-            
-            if not args.dry_run:
-                if delete_video(path, is_remote):
-                    print(f"Successfully deleted video {video_id}")
-                else:
-                    print(f"Failed to delete video {video_id}")
-                update_progress()
+            update_progress()    
 
     # Process remaining missing videos (remove from success log)
     for collection, missing_ids in results['missing'].items():
@@ -299,29 +313,11 @@ def main():
                 print(f"Removing video {video_id} from download success log")
                 if not args.dry_run:
                     remove_from_success_log(file_handler.success_log_path, video_id)
-
-    # Process empty videos (remove from success log)
-    for collection, empty_files in results['empty'].items():
-        for video_id, file_info in empty_files.items():
-            print(f"Removing empty video {video_id} from download success log and deleting file")
-            if not args.dry_run:
-                # Determine the path and whether it's remote
-                is_remote = file_info.startswith('(remote)')
-                filename = file_info.split(' ', 1)[1]  # Remove (local) or (remote) prefix
-                
-                if is_remote:
-                    path = f"{args.gdrive_base_path}/{os.path.basename(args.input_path)}/{collection}/{filename}"
-                else:
-                    path = os.path.join(args.input_path, collection, filename)
-                
-                # First delete the empty file
-                if delete_video(path, is_remote):
-                    print(f"Successfully deleted empty video {video_id}")
-                else:
-                    print(f"Failed to delete empty video {video_id}")
-                # Then remove from success log
-                remove_from_success_log(file_handler.success_log_path, video_id)
-                update_progress()
+    
+    # Process remaining extra, empty, and invalid files
+    process_files('extra', results, args, file_handler, videos_to_move)
+    process_files('empty', results, args, file_handler, videos_to_move)
+    process_files('invalid_name', results, args, file_handler, videos_to_move)
 
     if args.dry_run:
         print("\nThis was a dry run. No changes were made.")

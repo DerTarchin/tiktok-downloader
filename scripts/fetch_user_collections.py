@@ -10,7 +10,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
 from downloader.tiktok_api import fetch_collections, format_video_url, fetch_collection_items
-from scripts.count_unique_videos import process_directory
+from scripts.count_videos_to_download import process_directory
 
 def main():
     """Main function to run the script."""

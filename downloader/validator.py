@@ -13,13 +13,14 @@ class Validator:
     def validate_downloads(self, input_path):
         """
         Validates that all videos from text files are either downloaded as MP4s or listed in error logs.
-        Also checks for zero-byte files.
+        Also checks for sub-50kb files and files without extensions.
         
         Returns:
             dict: {
                 'missing': {collection_name: set(missing_ids)},
                 'extra': {collection_name: {id: filename}},
-                'empty': {collection_name: {id: filename}}  # Zero-byte files
+                'empty': {collection_name: {id: filename}},  # Files under 50kb
+                'invalid_name': {collection_name: {filename: full_path}}  # Files without extensions
             }
         """
         print("\nValidating downloads...")
@@ -27,7 +28,8 @@ class Validator:
         validation_results = {
             'missing': {},
             'extra': {},
-            'empty': {}  # Zero-byte files
+            'empty': {},  # Files under 50kb
+            'invalid_name': {}  # Files without extensions
         }
         
         # Define video extensions at the start of the method
@@ -105,6 +107,7 @@ class Validator:
             downloaded_map = {}  # Map IDs to their filenames
             extra_ids = {}  # Store extra IDs and filenames
             empty_files = {}  # Store zero-byte files
+            invalid_files = {}  # Store files without extensions
             
             # Check local folder if it exists
             if os.path.exists(collection_folder):
@@ -114,23 +117,31 @@ class Validator:
                 
                 for filename in local_files:
                     file_path = os.path.join(collection_folder, filename)
-                    # Check for video files with matching ID pattern
-                    if filename.lower().endswith(video_extensions):
-                        file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
-                        file_size = os.path.getsize(file_path)
+                    # Check for files without extensions
+                    if '.' not in filename:
+                        invalid_files[filename] = file_path
+                        continue
                         
-                        if file_id.isdigit():
-                            if not is_file_size_valid(file_size):
-                                empty_files[file_id] = f"(local) {filename}"
-                            else:
-                                downloaded_ids.add(file_id)
-                                downloaded_map[file_id] = f"(local) {filename}"
-                        else:
-                            # Video files without valid IDs are considered extra
-                            extra_ids[f"invalid_id_{len(extra_ids)}"] = f"(local) {filename}"
-                    else:
+                    # Check for video files with matching ID pattern
+                    if not filename.lower().endswith(video_extensions):
                         # Non-video files are considered extra
                         extra_ids[f"non_video_{len(extra_ids)}"] = f"(local) {filename}"
+                        continue
+                        
+                    file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
+                    file_size = os.path.getsize(file_path)
+                    
+                    if not file_id.isdigit():
+                        # Video files without valid IDs are considered extra
+                        extra_ids[f"invalid_id_{len(extra_ids)}"] = f"(local) {filename}"
+                        continue
+                        
+                    if not is_file_size_valid(file_size):
+                        empty_files[file_id] = f"(local) {filename}"
+                        continue
+                        
+                    downloaded_ids.add(file_id)
+                    downloaded_map[file_id] = f"(local) {filename}"
             
             # Check remote folder using rclone
             try:
@@ -160,21 +171,30 @@ class Validator:
                                 filename = line
                                 file_size = -1  # Assume non-zero size since file exists
                             
-                            if filename.lower().endswith(video_extensions):
-                                file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
+                            # Check for files without extensions
+                            if '.' not in filename:
+                                remote_path = f"{self.gdrive_base_path}/{username}/{collection_name}/{filename}"
+                                invalid_files[filename] = remote_path
+                                continue
                                 
-                                if file_id.isdigit():
-                                    if file_size != -1 and not is_file_size_valid(file_size):
-                                        empty_files[file_id] = f"(remote) {filename}"
-                                    else:
-                                        downloaded_ids.add(file_id)
-                                        downloaded_map[file_id] = f"(remote) {filename}"
-                                else:
-                                    # Video files without valid IDs are considered extra
-                                    extra_ids[f"invalid_id_{len(extra_ids)}"] = f"(remote) {filename}"
-                            else:
+                            if not filename.lower().endswith(video_extensions):
                                 # Non-video files are considered extra
                                 extra_ids[f"non_video_{len(extra_ids)}"] = f"(remote) {filename}"
+                                continue
+                                
+                            file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
+                            
+                            if not file_id.isdigit():
+                                # Video files without valid IDs are considered extra 
+                                extra_ids[f"invalid_id_{len(extra_ids)}"] = f"(remote) {filename}"
+                                continue
+                                
+                            if file_size != -1 and not is_file_size_valid(file_size):
+                                empty_files[file_id] = f"(remote) {filename}"
+                                continue
+                                
+                            downloaded_ids.add(file_id)
+                            downloaded_map[file_id] = f"(remote) {filename}"
                         except ValueError:
                             print(f"Warning: Could not parse rclone output line: {line}")
                 else:
@@ -218,6 +238,8 @@ class Validator:
                 validation_results['extra'][collection_name] = extra_ids
             if empty_files:
                 validation_results['empty'][collection_name] = empty_files
+            if invalid_files:
+                validation_results['invalid_name'][collection_name] = invalid_files
             
             # Report findings
             if extra_ids:
@@ -235,7 +257,13 @@ class Validator:
                 for vid_id, filename in empty_files.items():
                     print(f"\t{vid_id}, {filename}")
             
-            if not (extra_ids or missing_ids or empty_files):
+            if collection_name in validation_results['invalid_name']:
+                invalid_files = validation_results['invalid_name'][collection_name]
+                print(f"{len(invalid_files):,} files without extensions detected:")
+                for filename, path in invalid_files.items():
+                    print(f"\t{filename} at {path}")
+            
+            if not (extra_ids or missing_ids or empty_files or invalid_files):
                 print(f"✓ All videos accounted for in {collection_name}")
                 print(f"  Total unique IDs in text file: {len(expected_ids):,}")
                 print(f"  Downloaded: {len(downloaded_ids):,}")
