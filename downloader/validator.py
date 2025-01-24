@@ -206,11 +206,8 @@ class Validator:
             
             # Get error log IDs
             error_ids = set()
-            print('checking error log...', error_log_path)
             if os.path.exists(error_log_path):
-                print('error log exists')
                 with open(error_log_path, 'r') as f:
-                    print('checking error log...', f)
                     error_ids = {extract_video_id(url.strip().replace(' (private)', '')) 
                                for url in f if url.strip()}
             
