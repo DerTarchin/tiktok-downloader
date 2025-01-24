@@ -298,38 +298,48 @@ def process_link(driver, link, output_dir, index, success_file, failed_file):
 
 def main():
     parser = argparse.ArgumentParser(description='Extract and download TikTok audio files.')
-    parser.add_argument('input_file', help='Input file containing TikTok sound links')
+    parser.add_argument('input_path', help='Input file containing TikTok sound links or directory containing All Saved Sounds.txt')
     parser.add_argument('--download', action='store_true', help='Download the audio files')
     parser.add_argument('--concurrent', type=int, default=5, help='Number of concurrent downloads (default: 5)')
     args = parser.parse_args()
     
+    # Determine if input is a directory or file
+    input_path = os.path.abspath(args.input_path)
+    if os.path.isdir(input_path):
+        # Look for All Saved Sounds.txt in the directory
+        input_file = os.path.join(input_path, 'All Saved Sounds.txt')
+        if not os.path.exists(input_file):
+            print(f"Error: Could not find All Saved Sounds.txt in {input_path}")
+            sys.exit(1)
+        base_dir = input_path
+    else:
+        input_file = input_path
+        base_dir = os.path.dirname(input_path)
+    
     # Extract links
-    links = extract_links(args.input_file)
+    links = extract_links(input_file)
     print(f"Found {len(links):,} sound links")
     
     if not links:
         print("No links found in input file")
         sys.exit(1)
     
-    # Get input file directory
-    input_dir = os.path.dirname(os.path.abspath(args.input_file))
-    
     # Save links to file
-    links_file = os.path.join(input_dir, 'links.txt')
+    links_file = os.path.join(base_dir, 'links.txt')
     with open(links_file, 'w', encoding='utf-8') as f:
         for link in links:
             f.write(f"{link}\n")
     print(f"\nSaved {len(links):,} links to: {links_file}")
     
-    # Create Sounds directory if downloading
+    # Create output directory if downloading
     if args.download:
-        output_dir = os.path.join(input_dir, 'Sounds')
+        output_dir = os.path.join(base_dir, 'All Saved Sounds')
         os.makedirs(output_dir, exist_ok=True)
         print(f"Created output directory: {output_dir}")
         
         # Set up log files
-        success_file = os.path.join(input_dir, 'download_success.log')
-        failed_file = os.path.join(input_dir, 'failed_downloads.log')
+        success_file = os.path.join(base_dir, 'download_success.log')
+        failed_file = os.path.join(base_dir, 'failed_downloads.log')
         
         # Ensure log files exist
         for log_file in [success_file, failed_file]:

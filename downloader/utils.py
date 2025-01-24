@@ -5,6 +5,7 @@ import re
 from urllib.parse import urlparse
 import time
 import subprocess
+import sys
 
 SPLIT_SIZE = 500  # Maximum number of URLs per split file
 FILE_SIZE_THRESHOLD_KB = 50 # Minimum file size in KB
@@ -511,3 +512,37 @@ def log_worker(worker_type, worker_num, message):
 def is_file_size_valid(file_size_in_bytes):
     """Check if a file is valid based on its size."""
     return file_size_in_bytes / 1_000 > FILE_SIZE_THRESHOLD_KB
+
+def filter_links_against_collections(links, collection_paths):
+    """
+    Filter out links that exist in any of the collection files.
+    
+    Args:
+        links (list): List of URLs to filter
+        collection_paths (list): List of paths to collection files to check against
+        
+    Returns:
+        list: Filtered list of URLs that don't exist in any collection
+    """
+    # Get all video IDs from collections
+    collection_video_ids = set()
+    for collection_path in collection_paths:
+        try:
+            with open(collection_path, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        video_id = extract_video_id(line.strip())
+                        if video_id:
+                            collection_video_ids.add(video_id)
+        except Exception as e:
+            print(f"Error reading {collection_path}: {str(e)}", file=sys.stderr)
+            continue
+    
+    # Filter out links that exist in collections
+    filtered_links = []
+    for link in links:
+        video_id = extract_video_id(link)
+        if video_id not in collection_video_ids:
+            filtered_links.append(link)
+    
+    return filtered_links

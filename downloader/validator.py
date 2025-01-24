@@ -3,6 +3,7 @@
 import os
 import subprocess
 from .utils import extract_video_id, is_file_size_valid
+import re
 
 
 class Validator:
@@ -62,7 +63,8 @@ class Validator:
                 return (1, float('inf'), filename.lower())  # Regular uncategorized files
             
             # Regular collection files (e.g., "Home.txt", "Korean food.txt", etc.)
-            return (0, 0, filename.lower())  # 0 to put regular collections first
+            # Use alphanumeric sorting for regular collections
+            return (0, 0, [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', filename)])
         
         text_files.sort(key=sort_key)
         

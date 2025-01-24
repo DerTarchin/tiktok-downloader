@@ -9,6 +9,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.firefox import GeckoDriverManager
 import subprocess
 from urllib.parse import urlparse
 import signal
@@ -22,6 +23,14 @@ MAX_WAIT_TIME_SHORT = 5  # Maximum wait time for no file size change or download
 MAX_WAIT_TIME_RENDER = 90  # Maximum wait time for photo render completion
 
 MAX_FILENAME_LENGTH = 70
+
+# Install geckodriver once at module level
+_geckodriver_path = None
+def get_geckodriver_path():
+    global _geckodriver_path
+    if _geckodriver_path is None:
+        _geckodriver_path = GeckoDriverManager().install()
+    return _geckodriver_path
 
 class SeleniumHandler:
     def __init__(self, temp_download_dir, headless=True, worker_num=1, verbose=False):
@@ -106,8 +115,8 @@ class SeleniumHandler:
         for pref, value in ublock_preferences.items():
             options.set_preference(pref, value)
 
-        # Configure Selenium WebDriver using system geckodriver
-        service = Service('geckodriver')
+        # Use the pre-installed geckodriver
+        service = Service(get_geckodriver_path())
         self.driver = webdriver.Firefox(service=service, options=options)
 
         # Install uBlock Origin from local file

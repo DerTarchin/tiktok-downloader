@@ -13,6 +13,7 @@ from downloader.utils import (get_highest_group_number, write_and_process_urls,
 from downloader.file_processor import process_file, process_error_logs
 from downloader.worker_pool import WorkerPool
 import subprocess
+import re
 
 
 def main():
@@ -135,12 +136,12 @@ def main():
                     if is_all_saves and "Group " in x:
                         try:
                             group_num = int(x.split("Group ")[1].split(")")[0])
-                            return (is_all_saves, group_num, '')  # Empty string for consistent tuple shape
+                            return (1, group_num, '')  # 1 to put after regular collections
                         except (ValueError, IndexError):
                             pass
                     
-                    # Otherwise sort by lowercase filename
-                    return (is_all_saves, float('inf'), x.lower())  # Use float('inf') for non-group files
+                    # Otherwise, use alphanumeric sorting for regular collections
+                    return (0, 0, [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', x)])
                 
                 text_files.sort(key=sort_key)
                 group_files.sort(key=sort_key)

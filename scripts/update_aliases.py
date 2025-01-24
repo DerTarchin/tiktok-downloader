@@ -23,7 +23,8 @@ def generate_aliases(project_root):
         'ttsplit': 'scripts/split_links.py',
         'ttaudio': 'scripts/download_tiktok_audio.py',
         'ttsync': 'scripts/sync_to_remote.py',
-        'ttphotos': 'scripts/download_slideshows.py'
+        'ttphotos': 'scripts/download_slideshows.py',
+        'ttprep': 'scripts/prep.py'
     }
     
     alias_lines = []

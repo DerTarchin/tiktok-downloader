@@ -2,6 +2,7 @@
 """Script to count the total number of videos to be downloaded across text files in a directory."""
 
 import os
+import re
 import sys
 from typing import Set
 
@@ -24,7 +25,7 @@ def count_unique_videos(directory: str, collections=None) -> tuple[Set[str], lis
                 and not f.startswith('[error log]')]
     
     # Sort files for consistent output
-    txt_files.sort()
+    txt_files.sort(key=lambda f: [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', f)])
     
     # Build a map of collection names to their expected totals
     if collections:
