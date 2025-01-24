@@ -592,7 +592,7 @@ class SeleniumHandler:
 
             # Wait for new file to appear in temp downloads directory
             start_time = time.time()
-            while time.time() - start_time < MAX_WAIT_TIME_SHORT:  # Short timeout just to detect if download started
+            while time.time() - start_time < MAX_WAIT_TIME_RENDER:  # Short timeout just to detect if download started
                 downloaded_files = os.listdir(self.temp_download_dir)
                 if downloaded_files:
                     # Include .part files in the search but prioritize complete files
@@ -613,7 +613,7 @@ class SeleniumHandler:
                         raise Exception("Failed to process downloaded photo file")
                 time.sleep(0.5)
 
-            raise Exception(f"No download started after {MAX_WAIT_TIME_SHORT} seconds")
+            raise Exception(f"No download started after {MAX_WAIT_TIME_RENDER} seconds")
         except Exception as e:
             if self.verbose:
                 self._log(f"\t-> Failed at: Photo download process for {url}")
@@ -640,7 +640,7 @@ class SeleniumHandler:
                     
                     # Check for download button
                     download_button = self.driver.find_element(By.CSS_SELECTOR, 'a[data-event="hd_download_click"]')
-                    return download_button.is_displayed()
+                    return download_button.is_displayed() and download_button.get_attribute("href")
                 except:
                     return False
 
@@ -652,10 +652,16 @@ class SeleniumHandler:
                 raise Exception("private")
 
             # Get the download button (we know it exists if we got here)
-            download_button = self.driver.find_element(By.CSS_SELECTOR, 'a[data-event="hd_download_click"]')
-            download_url = download_button.get_attribute("href")
-            if not download_url:
-                raise Exception("Download button found but href attribute is empty")
+            try:
+                download_button = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'a[data-event="hd_download_click"]'))
+                )
+                download_url = download_button.get_attribute("href")
+                if not download_url:
+                    raise Exception("Download button found but href attribute is empty")
+            except Exception as e:
+                self._log(f"\t-> Failed to get download URL: {str(e)}")
+                raise Exception("Failed to get valid download URL from button")
 
             # Rest of the existing download logic
             uploader = self.get_uploader_from_page(url)

@@ -62,9 +62,10 @@ The main downloader script that downloads TikTok videos and photos using both yt
 
 - Python 3.x
 - Firefox browser (for Selenium)
-- Firefox WebDriver (geckodriver)
 - rclone (for Google Drive sync)
 - Python packages (see requirements.txt)
+
+Note: The Firefox WebDriver (geckodriver) will be automatically installed by the script.
 
 ### Multi-Computer Setup
 
@@ -77,12 +78,6 @@ To use this project on multiple computers:
    - macOS: `brew install firefox`
    - Ubuntu: `sudo apt install firefox`
    - Windows: Download from https://www.mozilla.org/firefox/
-
-   **Firefox WebDriver (geckodriver)**:
-
-   - macOS: `brew install geckodriver`
-   - Ubuntu: `sudo apt install firefox-geckodriver`
-   - Windows: Download from https://github.com/mozilla/geckodriver/releases
 
    **rclone**:
 

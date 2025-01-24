@@ -77,8 +77,11 @@ class FileHandler:
 
     def get_error_log_path(self, file_path):
         """Get the path to the error log file for a given input file"""
+        base_name = os.path.basename(file_path)
+        if not base_name.endswith('.txt'):
+            base_name += '.txt'
         return os.path.join(os.path.dirname(file_path), 
-                           f"{self.error_prefix}{os.path.basename(file_path)}")
+                           f"{self.error_prefix}{base_name}")
 
     def log_error(self, url, error_file_path, is_private=False):
         """Log failed URL to error file with file locking, preventing duplicates"""

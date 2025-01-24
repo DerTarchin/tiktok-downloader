@@ -206,8 +206,11 @@ class Validator:
             
             # Get error log IDs
             error_ids = set()
+            print('checking error log...', error_log_path)
             if os.path.exists(error_log_path):
+                print('error log exists')
                 with open(error_log_path, 'r') as f:
+                    print('checking error log...', f)
                     error_ids = {extract_video_id(url.strip().replace(' (private)', '')) 
                                for url in f if url.strip()}
             
@@ -217,13 +220,11 @@ class Validator:
             collection_success_entries = {entry.split(':::', 1)[-1] for entry in success_log_entries 
                                        if entry.startswith(collection_prefix)}
             
-            # If no prefixed entries found, fall back to non-prefixed entries
+            # If no prefixed entries found, check for non-prefixed entries
             if not collection_success_entries:
-                # Check for entries that don't have a collection prefix
-                # We split on pipe and check if the first part is a known collection name
+                # Check for entries that don't have any collection prefix
                 collection_success_entries = {entry for entry in success_log_entries 
-                                           if not any(entry.startswith(f"{f.split('.')[0]}:::") 
-                                                    for f in text_files)}
+                                           if ':::' not in entry}
             
             success_ids = {extract_video_id(url) for url in collection_success_entries}
             downloaded_ids.update(success_ids)
