@@ -201,6 +201,9 @@ def process_files(directory, to_process, should_combine, use_uncategorized_label
         links_file = os.path.join(os.path.dirname(sound_file), 'links.txt')
         if os.path.exists(links_file):
             with open(links_file, 'r') as src:
+                # remove existing output file
+                if os.path.exists(output_file):
+                    os.remove(output_file)
                 with open(output_file, 'a') as dst:
                     dst.write(src.read())
             os.remove(links_file)

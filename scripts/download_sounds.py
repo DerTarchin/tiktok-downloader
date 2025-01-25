@@ -296,6 +296,13 @@ def process_link(driver, link, output_dir, index, success_file, failed_file):
         print("Failed to get download link")
         return False, link
 
+def find_input_file(directory):
+    """Recursively search for 'All Saved Sounds.txt' in the given directory and its subdirectories."""
+    for root, _, files in os.walk(directory):
+        if 'All Saved Sounds.txt' in files:
+            return os.path.join(root, 'All Saved Sounds.txt')
+    return None
+
 def main():
     parser = argparse.ArgumentParser(description='Extract and download TikTok audio files.')
     parser.add_argument('input_path', help='Input file containing TikTok sound links or directory containing All Saved Sounds.txt')
@@ -306,18 +313,20 @@ def main():
     # Determine if input is a directory or file
     input_path = os.path.abspath(args.input_path)
     if os.path.isdir(input_path):
-        # Look for All Saved Sounds.txt in the directory
-        input_file = os.path.join(input_path, 'All Saved Sounds.txt')
-        if not os.path.exists(input_file):
-            print(f"Error: Could not find All Saved Sounds.txt in {input_path}")
+        # Search for All Saved Sounds.txt in the directory and subdirectories
+        source_path = find_input_file(input_path)
+        if not source_path:
+            print(f"Error: Could not find All Saved Sounds.txt in {input_path} or its subdirectories")
             sys.exit(1)
         base_dir = input_path
     else:
-        input_file = input_path
+        source_path = input_path
         base_dir = os.path.dirname(input_path)
     
+    source_dir = os.path.dirname(source_path)
+    
     # Extract links
-    links = extract_links(input_file)
+    links = extract_links(source_path)
     print(f"Found {len(links):,} sound links")
     
     if not links:
@@ -337,9 +346,9 @@ def main():
         os.makedirs(output_dir, exist_ok=True)
         print(f"Created output directory: {output_dir}")
         
-        # Set up log files
-        success_file = os.path.join(base_dir, 'download_success.log')
-        failed_file = os.path.join(base_dir, 'failed_downloads.log')
+        # Set up log files in the source directory
+        success_file = os.path.join(source_dir, 'sounds_success.log')
+        failed_file = os.path.join(source_dir, 'sounds_failed.log')
         
         # Ensure log files exist
         for log_file in [success_file, failed_file]:
