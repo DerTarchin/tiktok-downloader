@@ -124,7 +124,7 @@ def process_files(directory, to_process, should_combine, use_uncategorized_label
             if file_type == 'combined':
                 output_name = "Uncategorized Faves & Likes.txt" if use_uncategorized_label else "Faves & Likes.txt"
             else:
-                base = "Uncategorized " if use_uncategorized_label else ""
+                base = "Uncategorized " if use_uncategorized_label and file_type == 'f' else ""
                 base += "Favorites" if file_type == 'f' else "Likes"
                 output_name = f"{base}.txt"
             
@@ -198,10 +198,6 @@ def process_files(directory, to_process, should_combine, use_uncategorized_label
             with open(output_file, 'r') as f:
                 num_links = sum(1 for _ in f)
             print(f"{num_links:,} sounds found.")
-            
-            # Run download_sounds.py if downloading is requested
-            if begin_downloading:
-                run_script('download_sounds.py', directory, capture_output=False)
     
     # Process posts
     if 'p' in to_process and POST_FILE in found_files:
@@ -280,6 +276,10 @@ def main():
     # Run count script to show number of videos to download
     if 'l' in to_process or 'f' in to_process:
         run_script('count_videos_to_download.py', directory, capture_output=False)
+
+    # begin downloading sounds
+    if 's' in to_process and begin_downloading:
+        run_script('download_sounds.py', directory, capture_output=False)
 
 if __name__ == '__main__':
     main() 
