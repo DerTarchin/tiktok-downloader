@@ -32,6 +32,7 @@ def find_input_file(directory):
 def main():
     parser = argparse.ArgumentParser(description='Extract TikTok sound links from input file.')
     parser.add_argument('input_path', help='Input file containing TikTok sound links or directory containing a Sounds file')
+    parser.add_argument('--output', help='Output file path (default: combined_urls.txt in same directory as input)')
     args = parser.parse_args()
     
     # Determine if input is a directory or file
@@ -55,8 +56,10 @@ def main():
         print("No links found in input file")
         sys.exit(1)
     
+    # Determine output file path
+    output_file = args.output if args.output else os.path.join(os.path.dirname(source_path), 'combined_urls.txt')
+    
     # Save links to file
-    output_file = os.path.join(base_dir, 'Sound Links.txt')
     with open(output_file, 'w', encoding='utf-8') as f:
         for link in links:
             f.write(f"{link}\n")

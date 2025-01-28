@@ -191,32 +191,17 @@ def process_files(directory, to_process, should_combine, use_uncategorized_label
         sound_file = found_files[SOUND_FILE]
         print(f"\nProcessing sounds from: {sound_file}")
         
-        # Only pass --download argument if begin_downloading is True
-        args = [sound_file]
-        if begin_downloading:
-            args.append('--download')
-        run_script('download_sounds.py', *args)
+        # Parse URLs first, writing directly to output file
+        run_script('parse_urls.py', sound_file, '--output', output_file, capture_output=False)
         
-        # Move links file to data directory
-        links_file = os.path.join(os.path.dirname(sound_file), 'links.txt')
-        if os.path.exists(links_file):
-            with open(links_file, 'r') as src:
-                # remove existing output file
-                if os.path.exists(output_file):
-                    os.remove(output_file)
-                with open(output_file, 'a') as dst:
-                    dst.write(src.read())
-            os.remove(links_file)
+        if os.path.exists(output_file):
+            with open(output_file, 'r') as f:
+                num_links = sum(1 for _ in f)
+            print(f"{num_links:,} sounds found.")
             
-            # Move the output file to the main directory
-            main_output = os.path.join(directory, 'All Saved Sounds.txt')
-            with open(output_file, 'r') as src, open(main_output, 'w') as dst:
-                dst.write(src.read())
-            
-            if os.path.exists(output_file):
-                with open(output_file, 'r') as f:
-                    num_links = sum(1 for _ in f)
-                print(f"{num_links:,} sounds found.")
+            # Run download_sounds.py if downloading is requested
+            if begin_downloading:
+                run_script('download_sounds.py', directory, capture_output=False)
     
     # Process posts
     if 'p' in to_process and POST_FILE in found_files:

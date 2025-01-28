@@ -2,6 +2,7 @@
 """Script to download TikTok audio files from a text file containing sound links."""
 
 import os
+import re
 import sys
 import time
 import argparse
@@ -239,9 +240,9 @@ def download_audio(url, output_dir, index, link, max_retries=3):
     print(f"Failed to download audio after {max_retries} attempts")
     return None
 
-def process_link(driver, link, output_dir, index, success_file, failed_file):
+def process_link(driver, link, output_dir, index, success_file, failed_file, worker_number, verbose):
     """Process a single link with the given driver."""
-    print(f"\nProcessing link {index:,}: {link}")
+    print(f"\n[Worker {worker_number}] Downloading link {index:,}: {link}")
     
     # Get download link
     download_link = get_audio_download_link(driver, link)
@@ -249,7 +250,8 @@ def process_link(driver, link, output_dir, index, success_file, failed_file):
         # Download the file
         filepath = download_audio(download_link, output_dir, index, link)
         if filepath:
-            print(f"Downloaded as: {os.path.basename(filepath)}")
+            if verbose:
+                print(f"[Worker {worker_number}] Downloaded as: {os.path.basename(filepath)}")
             
             # Verify file exists with correct ID before logging success
             music_id = extract_music_id(link)
@@ -271,13 +273,13 @@ def process_link(driver, link, output_dir, index, success_file, failed_file):
                 
                 return True, link
             else:
-                print("File verification failed - file not found with correct ID")
+                print(f"[Worker {worker_number}] File verification failed - file not found with correct ID")
                 return False, link
         else:
-            print("Failed to download audio")
+            print(f"[Worker {worker_number}] Failed to download audio")
             return False, link
     else:
-        print("Failed to get download link")
+        print(f"[Worker {worker_number}] Failed to get download link")
         return False, link
 
 def find_input_file(directory):
@@ -301,7 +303,10 @@ def main():
     parser = argparse.ArgumentParser(description='Download TikTok audio files.')
     parser.add_argument('input_path', help='Input file containing TikTok sound links or directory containing All Saved Sounds.txt')
     parser.add_argument('--concurrent', type=int, default=5, help='Number of concurrent downloads (default: 5)')
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     args = parser.parse_args()
+
+    verbose = args.verbose
     
     # Determine if input is a directory or file
     input_path = os.path.abspath(args.input_path)
@@ -329,7 +334,8 @@ def main():
     # Create output directory
     output_dir = os.path.join(base_dir, 'All Saved Sounds')
     os.makedirs(output_dir, exist_ok=True)
-    print(f"Created output directory: {output_dir}")
+    if verbose:
+        print(f"Created output directory: {output_dir}")
     
     # Set up log files in the source directory
     success_file = os.path.join(source_dir, 'sounds_success.log')
@@ -432,7 +438,9 @@ def main():
                         output_dir,
                         i + 1,
                         success_file,
-                        failed_file
+                        failed_file,
+                        i % len(drivers) + 1,  # Pass worker number
+                        verbose
                     ): link
                     for i, link in enumerate(links)
                 }
@@ -443,17 +451,18 @@ def main():
                         success, link = future.result()
                         if success:
                             session_successful_downloads.append(link)
-                            print(f"Successfully downloaded: {link}")
+                            if verbose:
+                                print(f"[Worker {i % len(drivers) + 1}] Successfully downloaded: {link}")
                             log_success(link)
                             remove_from_failed(link)
                         else:
                             session_failed_links.append(link)
-                            print(f"Failed to download: {link}")
+                            print(f"[Worker {i % len(drivers) + 1}] Failed to download: {link}")
                             log_failure(link)
                     except Exception as e:
                         link = future_to_link[future]
                         session_failed_links.append(link)
-                        print(f"Exception occurred while processing {link}: {str(e)}")
+                        print(f"[Worker {i % len(drivers) + 1}] Exception occurred while processing {link}: {str(e)}")
                         log_failure(link)
         
         finally:

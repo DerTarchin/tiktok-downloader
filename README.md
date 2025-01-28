@@ -29,15 +29,20 @@ python scripts/parse_urls.py input_file.txt
 
 # Process multiple files
 python scripts/parse_urls.py file1.txt file2.txt file3.txt
+
+# Specify custom output file
+python scripts/parse_urls.py input_file.txt --output custom_output.txt
 ```
 
 The script will:
 
 - Read all input files
-- Extract URLs from each file
-- Combine all unique URLs into a single output file (`combined_urls.txt`)
+- Extract URLs from each file (including sound links with "Sound Link:" prefix)
+- Combine all unique URLs into a single output file (default: `combined_urls.txt`)
 - Save the output file in the same directory as the first input file
 - Show progress and statistics for each processed file
+- Handle both regular TikTok URLs and sound links
+- Automatically find sound files in directories if path is a directory
 
 ## Video Downloader (main.py)
 
@@ -346,39 +351,36 @@ The script will:
 
 ### download_sounds.py
 
-A utility script to extract and download TikTok audio files from a text file containing sound links.
+A utility script to download TikTok audio files from a text file containing sound links.
 
 ```bash
-# Extract links only (saves to links.txt in same directory)
+# Download sounds from a file
 python scripts/download_sounds.py input_file.txt
 
-# Download audio files (saves to Sounds directory)
-python scripts/download_sounds.py input_file.txt --download
+# Download from a directory (automatically finds All Saved Sounds.txt)
+python scripts/download_sounds.py path/to/directory
 
-# Control number of concurrent downloads (default: 5)
-python scripts/download_sounds.py input_file.txt --download --concurrent 3
+# Control concurrent downloads (default: 5)
+python scripts/download_sounds.py input_file.txt --concurrent 3
 ```
 
 The script will:
 
-- Extract TikTok sound links from the input file
-- Save extracted links to links.txt in the same directory as input file
-- Create a Sounds directory in the same location as input file
-- When downloading:
-  - Use concurrent downloads for better performance (default: 5 concurrent)
-  - Save files in format: "original_name music_id.mp3" (limited to 70 chars)
-  - Track successful and failed downloads in real-time
-  - Remove successful downloads from failed log automatically
-  - Skip already downloaded files
-  - Validate files after download
-  - Show detailed progress and statistics
-- Handle errors gracefully with detailed logging
-- Provide a final summary with:
-  - Successfully downloaded files this session
+- Find and process sound links from input file or directory
+- Create an "All Saved Sounds" directory for downloads
+- Use concurrent downloads with multiple Firefox instances
+- Extract music IDs from URLs for proper file naming
+- Format filenames as "original_name music_id.mp3" (limited to 70 chars)
+- Track successful and failed downloads in separate logs
+- Skip already downloaded files
+- Validate downloads with minimum size checks
+- Clean up failed downloads automatically
+- Provide detailed progress and final statistics including:
+  - Files downloaded in current session
   - Total successful downloads
   - Actual files in directory
-  - Failed downloads
-  - Any mismatches or validation issues
+  - Failed downloads and their URLs
+  - Any mismatches between logs and files
 
 ### remove_group_duplicates.py
 
@@ -621,3 +623,45 @@ After running the script, remember to:
 ```bash
 source ~/.zshrc  # Apply the changes
 ```
+
+### prep.py
+
+A utility script to process TikTok collections and prepare them for downloading. This script helps organize and deduplicate content from various TikTok collections.
+
+```bash
+# Process collections in current directory
+python scripts/prep.py
+
+# Process collections in specific directory
+python scripts/prep.py path/to/directory
+```
+
+The script will:
+
+- Process multiple types of collections:
+  - Favorites (from "Favorite Videos.txt")
+  - Likes (from "Like List.txt")
+  - Personal Posts (from "Posts.txt")
+  - Sounds (from "Favorite Sounds.txt")
+- Create a data directory for processed files
+- Combine Favorites and Likes if requested
+- Filter out duplicates across collections
+- Add "Uncategorized" prefix to filenames if requested
+- Split large collections into smaller groups
+- Start downloading sounds and posts immediately if requested
+- Show statistics about processed files and duplicates
+- Run final count of videos to download
+
+Interactive options:
+
+- Choose which collections to process (F/L/P/S)
+- Option to avoid duplicates across collections
+- Option to use "Uncategorized" label
+- Option to begin downloading sounds/posts immediately
+
+The script integrates with other tools in the toolkit:
+
+- Uses parse_urls.py for URL extraction
+- Uses download_sounds.py for sound downloads
+- Uses dedupe_links.py for duplicate removal
+- Uses count_videos_to_download.py for final statistics
