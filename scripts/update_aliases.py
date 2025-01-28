@@ -30,7 +30,7 @@ def generate_aliases(project_root):
     alias_lines = []
     for alias_name, script_path in aliases.items():
         full_path = os.path.join(project_root, script_path)
-        alias_lines.append(f'alias {alias_name}="python3 {full_path}"')
+        alias_lines.append(f'alias {alias_name}="python3 \'{full_path}\'"')
     
     # Add help alias that shows all available commands with their script names
     alias_help_lines = [f'{name} ({script})' for name, script in sorted(aliases.items())]
