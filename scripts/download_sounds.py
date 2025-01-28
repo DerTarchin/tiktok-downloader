@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Script to extract and optionally download TikTok audio files from a text file containing sound links."""
+"""Script to download TikTok audio files from a text file containing sound links."""
 
 import os
-import re
 import sys
 import time
 import argparse
@@ -14,21 +13,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 import threading
-
-def extract_links(input_file):
-    """Extract TikTok sound links from the input file."""
-    links = []
-    with open(input_file, 'r', encoding='utf-8') as f:
-        content = f.read()
-        
-    # Find all sound links using regex
-    pattern = r'Sound Link: (https://[^\s]+)'
-    matches = re.finditer(pattern, content)
-    
-    for match in matches:
-        links.append(match.group(1))
-        
-    return links
 
 def setup_driver():
     """Set up and return a Firefox webdriver instance."""
@@ -265,7 +249,7 @@ def process_link(driver, link, output_dir, index, success_file, failed_file):
         # Download the file
         filepath = download_audio(download_link, output_dir, index, link)
         if filepath:
-            print(f"Downloadeded as: {os.path.basename(filepath)}")
+            print(f"Downloaded as: {os.path.basename(filepath)}")
             
             # Verify file exists with correct ID before logging success
             music_id = extract_music_id(link)
@@ -303,20 +287,29 @@ def find_input_file(directory):
             return os.path.join(root, 'All Saved Sounds.txt')
     return None
 
+def read_links(file_path):
+    """Read links from a file, one per line."""
+    links = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            link = line.strip()
+            if link:
+                links.append(link)
+    return links
+
 def main():
-    parser = argparse.ArgumentParser(description='Extract and download TikTok audio files.')
+    parser = argparse.ArgumentParser(description='Download TikTok audio files.')
     parser.add_argument('input_path', help='Input file containing TikTok sound links or directory containing All Saved Sounds.txt')
-    parser.add_argument('--download', action='store_true', help='Download the audio files')
     parser.add_argument('--concurrent', type=int, default=5, help='Number of concurrent downloads (default: 5)')
     args = parser.parse_args()
     
     # Determine if input is a directory or file
     input_path = os.path.abspath(args.input_path)
     if os.path.isdir(input_path):
-        # Search for All Saved Sounds.txt in the directory and subdirectories
+        # Search for Sound Links.txt in the directory and subdirectories
         source_path = find_input_file(input_path)
         if not source_path:
-            print(f"Error: Could not find All Saved Sounds.txt in {input_path} or its subdirectories")
+            print(f"Error: Could not find Sound Links.txt in {input_path} or its subdirectories")
             sys.exit(1)
         base_dir = input_path
     else:
@@ -325,201 +318,188 @@ def main():
     
     source_dir = os.path.dirname(source_path)
     
-    # Extract links
-    links = extract_links(source_path)
+    # Read links
+    links = read_links(source_path)
     print(f"Found {len(links):,} sound links")
     
     if not links:
         print("No links found in input file")
         sys.exit(1)
     
-    # Save links to file
-    links_file = os.path.join(base_dir, 'links.txt')
-    with open(links_file, 'w', encoding='utf-8') as f:
-        for link in links:
-            f.write(f"{link}\n")
-    print(f"\nSaved {len(links):,} links to: {links_file}")
+    # Create output directory
+    output_dir = os.path.join(base_dir, 'All Saved Sounds')
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"Created output directory: {output_dir}")
     
-    # Create output directory if downloading
-    if args.download:
-        output_dir = os.path.join(base_dir, 'All Saved Sounds')
-        os.makedirs(output_dir, exist_ok=True)
-        print(f"Created output directory: {output_dir}")
-        
-        # Set up log files in the source directory
-        success_file = os.path.join(source_dir, 'sounds_success.log')
-        failed_file = os.path.join(source_dir, 'sounds_failed.log')
-        
-        # Ensure log files exist
-        for log_file in [success_file, failed_file]:
-            if not os.path.exists(log_file):
-                with open(log_file, 'w', encoding='utf-8') as f:
-                    pass
-        
-        # Load existing logs into memory
-        successful_links = set()
-        failed_links = set()
-        
+    # Set up log files in the source directory
+    success_file = os.path.join(source_dir, 'sounds_success.log')
+    failed_file = os.path.join(source_dir, 'sounds_failed.log')
+    
+    # Ensure log files exist
+    for log_file in [success_file, failed_file]:
+        if not os.path.exists(log_file):
+            with open(log_file, 'w', encoding='utf-8') as f:
+                pass
+    
+    # Load existing logs into memory
+    successful_links = set()
+    failed_links = set()
+    
+    try:
+        if os.path.exists(success_file):
+            with open(success_file, 'r', encoding='utf-8') as f:
+                successful_links = {line.strip() for line in f if line.strip()}
+    except Exception as e:
+        print(f"Warning: Error reading success log: {str(e)}")
+    
+    try:
+        if os.path.exists(failed_file):
+            with open(failed_file, 'r', encoding='utf-8') as f:
+                failed_links = {line.strip() for line in f if line.strip()}
+    except Exception as e:
+        print(f"Warning: Error reading failed log: {str(e)}")
+    
+    # Create locks for thread-safe file writing
+    success_lock = threading.Lock()
+    failed_lock = threading.Lock()
+    
+    def log_success(link):
+        """Thread-safe success logging"""
         try:
-            if os.path.exists(success_file):
-                with open(success_file, 'r', encoding='utf-8') as f:
-                    successful_links = {line.strip() for line in f if line.strip()}
+            with success_lock:
+                if link not in successful_links:
+                    successful_links.add(link)
+                    with open(success_file, 'a', encoding='utf-8') as f:
+                        f.write(f"{link}\n")
+                        f.flush()
+                        os.fsync(f.fileno())
         except Exception as e:
-            print(f"Warning: Error reading success log: {str(e)}")
-        
+            print(f"Warning: Error logging success: {str(e)}")
+    
+    def log_failure(link):
+        """Thread-safe failure logging"""
         try:
-            if os.path.exists(failed_file):
-                with open(failed_file, 'r', encoding='utf-8') as f:
-                    failed_links = {line.strip() for line in f if line.strip()}
+            with failed_lock:
+                if link not in failed_links:
+                    failed_links.add(link)
+                    with open(failed_file, 'a', encoding='utf-8') as f:
+                        f.write(f"{link}\n")
+                        f.flush()
+                        os.fsync(f.fileno())
         except Exception as e:
-            print(f"Warning: Error reading failed log: {str(e)}")
-        
-        # Create locks for thread-safe file writing
-        success_lock = threading.Lock()
-        failed_lock = threading.Lock()
-        
-        def log_success(link):
-            """Thread-safe success logging"""
-            try:
-                with success_lock:
-                    if link not in successful_links:
-                        successful_links.add(link)
-                        with open(success_file, 'a', encoding='utf-8') as f:
-                            f.write(f"{link}\n")
-                            f.flush()
-                            os.fsync(f.fileno())
-            except Exception as e:
-                print(f"Warning: Error logging success: {str(e)}")
-        
-        def log_failure(link):
-            """Thread-safe failure logging"""
-            try:
-                with failed_lock:
-                    if link not in failed_links:
-                        failed_links.add(link)
-                        with open(failed_file, 'a', encoding='utf-8') as f:
-                            f.write(f"{link}\n")
-                            f.flush()
-                            os.fsync(f.fileno())
-            except Exception as e:
-                print(f"Warning: Error logging failure: {str(e)}")
-        
-        def remove_from_failed(link):
-            """Thread-safe removal from failed log"""
-            try:
-                with failed_lock:
-                    if link in failed_links:
-                        failed_links.remove(link)
-                        with open(failed_file, 'w', encoding='utf-8') as f:
-                            for l in failed_links:
-                                f.write(f"{l}\n")
-                            f.flush()
-                            os.fsync(f.fileno())
-            except Exception as e:
-                print(f"Warning: Error removing from failed log: {str(e)}")
-        
-        # Filter out already downloaded links
-        links_to_process = [link for link in links if link not in successful_links]
-        if len(links) != len(links_to_process):
-            print(f"Skipping {len(links) - len(links_to_process):,} already downloaded files")
-            links = links_to_process
-        
-        # Track failures and successes for this session
-        session_failed_links = []
-        session_successful_downloads = []
-        
-        if links:
-            # Create a pool of webdrivers
-            drivers = []
-            try:
-                # Create webdriver pool
-                print(f"\nInitializing {args.concurrent} concurrent downloaders...")
-                for _ in range(min(args.concurrent, len(links))):
-                    drivers.append(setup_driver())
-                
-                # Process links concurrently
-                with concurrent.futures.ThreadPoolExecutor(max_workers=len(drivers)) as executor:
-                    future_to_link = {
-                        executor.submit(
-                            process_link,
-                            drivers[i % len(drivers)],
-                            link,
-                            output_dir,
-                            i + 1,
-                            success_file,
-                            failed_file
-                        ): link
-                        for i, link in enumerate(links)
-                    }
-                    
-                    # Process completed tasks
-                    for future in concurrent.futures.as_completed(future_to_link):
-                        try:
-                            success, link = future.result()
-                            if success:
-                                session_successful_downloads.append(link)
-                                print(f"Successfully downloaded: {link}")
-                                log_success(link)
-                                remove_from_failed(link)
-                            else:
-                                session_failed_links.append(link)
-                                print(f"Failed to download: {link}")
-                                log_failure(link)
-                        except Exception as e:
-                            link = future_to_link[future]
-                            session_failed_links.append(link)
-                            print(f"Exception occurred while processing {link}: {str(e)}")
-                            log_failure(link)
+            print(f"Warning: Error logging failure: {str(e)}")
+    
+    def remove_from_failed(link):
+        """Thread-safe removal from failed log"""
+        try:
+            with failed_lock:
+                if link in failed_links:
+                    failed_links.remove(link)
+                    with open(failed_file, 'w', encoding='utf-8') as f:
+                        for l in failed_links:
+                            f.write(f"{l}\n")
+                        f.flush()
+                        os.fsync(f.fileno())
+        except Exception as e:
+            print(f"Warning: Error removing from failed log: {str(e)}")
+    
+    # Filter out already downloaded links
+    links_to_process = [link for link in links if link not in successful_links]
+    if len(links) != len(links_to_process):
+        print(f"Skipping {len(links) - len(links_to_process):,} already downloaded files")
+        links = links_to_process
+    
+    # Track failures and successes for this session
+    session_failed_links = []
+    session_successful_downloads = []
+    
+    if links:
+        # Create a pool of webdrivers
+        drivers = []
+        try:
+            # Create webdriver pool
+            print(f"\nInitializing {args.concurrent} concurrent downloaders...")
+            for _ in range(min(args.concurrent, len(links))):
+                drivers.append(setup_driver())
             
-            finally:
-                # Clean up drivers
-                for driver in drivers:
+            # Process links concurrently
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(drivers)) as executor:
+                future_to_link = {
+                    executor.submit(
+                        process_link,
+                        drivers[i % len(drivers)],
+                        link,
+                        output_dir,
+                        i + 1,
+                        success_file,
+                        failed_file
+                    ): link
+                    for i, link in enumerate(links)
+                }
+                
+                # Process completed tasks
+                for future in concurrent.futures.as_completed(future_to_link):
                     try:
-                        driver.quit()
-                    except:
-                        pass
-                
-                # Validate downloads and logs
-                removed_success, removed_failed, added_failed = validate_download_logs(
-                    output_dir, success_file, failed_file, links
-                )
-                
-                # Verify actual files in directory
-                actual_files = [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f)) 
-                              and f.lower().endswith(('.mp3', '.m4a', '.wav'))]
-                
-                # Print summary
-                print("\nDownload Summary:")
-                print(f"Files reported as successfully downloaded this session: {len(session_successful_downloads):,}")
-                print(f"Total successful downloads in log: {len(successful_links):,}")
-                print(f"Actual audio files in directory: {len(actual_files):,}")
-                print(f"Total attempted downloads this session: {len(links):,}")
-                print(f"Failed downloads this session: {len(session_failed_links):,}")
-                print(f"Total failed downloads in log: {len(failed_links):,}")
-                
-                if removed_success or removed_failed or added_failed:
-                    print("\nLog Validation Results:")
-                    print(f"Removed from success log: {removed_success}")
-                    print(f"Removed from failed log: {removed_failed}")
-                    print(f"Added to failed log: {added_failed}")
-                
-                # Print failed links from this session
-                if session_failed_links:
-                    print("\nFailed downloads this session:")
-                    for link in session_failed_links:
-                        print(link)
-                    print(f"\nFailed download links have been saved to: {failed_file}")
-                
-                # Print warning if counts don't match
-                if len(actual_files) != len(successful_links):
-                    print(f"\nWARNING: Mismatch between logged successes ({len(successful_links)}) "
-                          f"and actual files ({len(actual_files)})")
-                    print("This could indicate some files were not properly saved or were removed.")
-    
-    elif not args.download:
-        # Just print the links if not downloading
-        for i, link in enumerate(links, 1):
-            print(f"Link {i}: {link}")
+                        success, link = future.result()
+                        if success:
+                            session_successful_downloads.append(link)
+                            print(f"Successfully downloaded: {link}")
+                            log_success(link)
+                            remove_from_failed(link)
+                        else:
+                            session_failed_links.append(link)
+                            print(f"Failed to download: {link}")
+                            log_failure(link)
+                    except Exception as e:
+                        link = future_to_link[future]
+                        session_failed_links.append(link)
+                        print(f"Exception occurred while processing {link}: {str(e)}")
+                        log_failure(link)
+        
+        finally:
+            # Clean up drivers
+            for driver in drivers:
+                try:
+                    driver.quit()
+                except:
+                    pass
+            
+            # Validate downloads and logs
+            removed_success, removed_failed, added_failed = validate_download_logs(
+                output_dir, success_file, failed_file, links
+            )
+            
+            # Verify actual files in directory
+            actual_files = [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f)) 
+                          and f.lower().endswith(('.mp3', '.m4a', '.wav'))]
+            
+            # Print summary
+            print("\nDownload Summary:")
+            print(f"Files reported as successfully downloaded this session: {len(session_successful_downloads):,}")
+            print(f"Total successful downloads in log: {len(successful_links):,}")
+            print(f"Actual audio files in directory: {len(actual_files):,}")
+            print(f"Total attempted downloads this session: {len(links):,}")
+            print(f"Failed downloads this session: {len(session_failed_links):,}")
+            print(f"Total failed downloads in log: {len(failed_links):,}")
+            
+            if removed_success or removed_failed or added_failed:
+                print("\nLog Validation Results:")
+                print(f"Removed from success log: {removed_success}")
+                print(f"Removed from failed log: {removed_failed}")
+                print(f"Added to failed log: {added_failed}")
+            
+            # Print failed links from this session
+            if session_failed_links:
+                print("\nFailed downloads this session:")
+                for link in session_failed_links:
+                    print(link)
+                print(f"\nFailed download links have been saved to: {failed_file}")
+            
+            # Print warning if counts don't match
+            if len(actual_files) != len(successful_links):
+                print(f"\nWARNING: Mismatch between logged successes ({len(successful_links)}) "
+                      f"and actual files ({len(actual_files)})")
+                print("This could indicate some files were not properly saved or were removed.")
 
 if __name__ == '__main__':
     main() 

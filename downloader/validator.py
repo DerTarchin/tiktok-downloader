@@ -153,13 +153,17 @@ class Validator:
                 
                 if result.returncode == 0:
                     remote_files = result.stdout.splitlines()
-                    for line in remote_files:
-                        line = line.strip()
+                    i = 0
+                    while i < len(remote_files):
+                        line = remote_files[i].strip()
+
                         if not line:
+                            i += 1
                             continue
 
                         # Try to parse as normal "size filename" format first
                         try:
+                            was_multiline = False
                             parts = line.split(' ', 1)
                             if len(parts) == 2:
                                 size_str, filename = parts
@@ -169,36 +173,71 @@ class Validator:
                                     # If first part isn't a number, treat the whole line as filename
                                     filename = line
                                     file_size = -1  # Assume non-zero size since file exists
+                                    was_multiline = True
                             else:
                                 filename = line
                                 file_size = -1  # Assume non-zero size since file exists
+                                was_multiline = True
                             
-                            # Check for files without extensions
-                            if '.' not in filename:
+                            # Check for files without video extensions
+                            if not filename.lower().endswith(video_extensions):
+                                # Look ahead at subsequent lines until we find a video extension
+                                next_i = i + 1
+                                while next_i < len(remote_files):
+                                    next_line = remote_files[next_i].strip()
+                                    # If next line starts with a number, it's a new file
+                                    if next_line and next_line.split(' ', 1)[0].isdigit():
+                                        break
+                                    filename += " " + next_line
+                                    was_multiline = True
+                                    if filename.lower().endswith(video_extensions):
+                                        i = next_i  # Update main index to skip the lines we consumed
+                                        break
+                                    next_i += 1
+
+                            # Strip leading/trailing spaces from filename
+                            filename = filename.strip()
+
+                            # Check for multi-line filenames
+                            if was_multiline:
                                 remote_path = f"{self.gdrive_base_path}/{username}/{collection_name}/{filename}"
                                 invalid_files[filename] = remote_path
+                                print(f"invalid file: {filename} (contains newline)")
+                                i += 1
                                 continue
-                                
-                            if not filename.lower().endswith(video_extensions):
-                                # Non-video files are considered extra
-                                extra_ids[f"non_video_{len(extra_ids)}"] = f"(remote) {filename}"
-                                continue
-                                
-                            file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
                             
-                            if not file_id.isdigit():
-                                # Video files without valid IDs are considered extra 
-                                extra_ids[f"invalid_id_{len(extra_ids)}"] = f"(remote) {filename}"
+                            # If still no video extension, mark as invalid
+                            if not filename.lower().endswith(video_extensions):
+                                remote_path = f"{self.gdrive_base_path}/{username}/{collection_name}/{filename}"
+                                invalid_files[filename] = remote_path
+                                print(f"invalid file: {filename}")
+                                i += 1
                                 continue
-                                
-                            if file_size != -1 and not is_file_size_valid(file_size):
-                                empty_files[file_id] = f"(remote) {filename}"
-                                continue
-                                
-                            downloaded_ids.add(file_id)
-                            downloaded_map[file_id] = f"(remote) {filename}"
+                            
                         except ValueError:
-                            print(f"Warning: Could not parse rclone output line: {line}")
+                            # If parsing fails, treat the whole line as filename
+                            filename = line
+                            file_size = -1  # Assume non-zero size since file exists
+
+                        if not filename.lower().endswith(video_extensions):
+                            # Non-video files are considered extra
+                            extra_ids[f"non_video_{len(extra_ids)}"] = f"(remote) {filename}"
+                            continue
+                            
+                        file_id = filename.rsplit(' ', 1)[-1].split('.')[0]  # Remove any extension
+                        
+                        if not file_id.isdigit():
+                            # Video files without valid IDs are considered extra 
+                            extra_ids[f"invalid_id_{len(extra_ids)}"] = f"(remote) {filename}"
+                            continue
+                            
+                        if file_size != -1 and not is_file_size_valid(file_size):
+                            empty_files[file_id] = f"(remote) {filename}"
+                            continue
+                            
+                        downloaded_ids.add(file_id)
+                        downloaded_map[file_id] = f"(remote) {filename}"
+                        i += 1
                 else:
                     print(f"Warning: Could not check remote folder: {result.stderr}")
             except Exception as e:

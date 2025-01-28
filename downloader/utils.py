@@ -37,7 +37,10 @@ def clean_filename(name):
     # Remove leading periods
     while name.startswith('.'):
         name = name[1:]
-        
+    
+    # Remove newline characters
+    name = name.replace('\n', '').replace('\r', '')
+    
     return name
 
 def extract_video_id(url):

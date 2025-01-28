@@ -58,7 +58,8 @@ def delete_video(path, is_remote=False):
         try:
             os.remove(path)
             return True
-        except Exception:
+        except Exception as e:
+            print(f"Error deleting file {path}: {e}")  # Print the error message
             return False
 
 def remove_from_success_log(success_log_path, video_id):
@@ -185,6 +186,7 @@ def move_videos_batch(moves, is_remote=False, batch_size=40):
 def process_files(file_type, results, args, file_handler, videos_to_move):
     """Process files based on their type: extra, empty, or invalid."""
     for collection, files in results[file_type].items():
+        print(f"\nProcessing {file_type} files in {collection}...")
         for video_id, file_info in files.items():
             if file_type == 'extra' and video_id in videos_to_move:
                 continue
@@ -240,7 +242,7 @@ def main():
     file_handler = FileHandler(args.input_path)
     results = validator.validate_downloads(args.input_path)
     
-    if not results['missing'] and not results['extra'] and not results['empty']:
+    if not any(results.values()):
         print("\nNo issues found. All collections are valid.")
         return
 
@@ -328,7 +330,7 @@ def main():
         print("\nRunning final validation check...")
         final_results = validator.validate_downloads(args.input_path)
         
-        if not final_results['missing'] and not final_results['extra'] and not final_results['empty']:
+        if not any(final_results.values()):
             print("\n✓ All issues have been resolved. Collections are now valid.")
         else:
             print("\n! Some issues could not be resolved:")
