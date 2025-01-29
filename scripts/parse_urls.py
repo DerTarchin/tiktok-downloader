@@ -11,7 +11,9 @@ def extract_links(input_file):
     links = []
     
     # Determine processing mode based on filename
-    is_sound_file = 'Sound' in os.path.basename(input_file)
+    filename = os.path.basename(input_file)
+    is_sound_file = 'Sound' in filename
+    # is_post_file = 'Post' in filename
     
     with open(input_file, 'r', encoding='utf-8') as f:
         content = f.read()
@@ -20,7 +22,7 @@ def extract_links(input_file):
         # Process sound links
         pattern = r'Sound Link: (https://[^\s]+)'
     else:
-        # Process video links
+        # Process video/post links (both use same pattern)
         pattern = r'Link: (https://[^\s]+)'
     
     matches = re.finditer(pattern, content)
@@ -36,7 +38,7 @@ def extract_links(input_file):
 
 def find_input_file(directory):
     """Recursively search for relevant files in the given directory and its subdirectories."""
-    target_files = ['Sounds.txt', 'Like List.txt', 'Favorite Videos.txt']
+    target_files = ['Sounds.txt', 'Like List.txt', 'Favorite Videos.txt', 'Post.txt']
     for root, _, files in os.walk(directory):
         for file in files:
             if any(target in file for target in target_files):
@@ -71,7 +73,16 @@ def main():
         # Extract links
         links = extract_links(source_path)
         all_links.update(links)
-        print(f"Found {len(links):,} links in {os.path.basename(source_path)}")
+        
+        # Determine file type for output message
+        filename = os.path.basename(source_path)
+        if 'Sound' in filename:
+            file_type = 'sound'
+        elif 'Post' in filename:
+            file_type = 'post'
+        else:
+            file_type = 'video'
+        print(f"Found {len(links):,} {file_type} links in {filename}")
     
     if not all_links:
         print("No links found in input files")

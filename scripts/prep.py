@@ -9,7 +9,7 @@ from pathlib import Path
 
 LIKE_FILE = "Like List.txt"
 FAVE_FILE = "Favorite Videos.txt"
-POST_FILE = "Posts.txt"
+POST_FILE = "Post.txt"
 SOUND_FILE = "Favorite Sounds.txt"
 
 # Add project root to Python path
@@ -204,12 +204,14 @@ def process_files(directory, to_process, should_combine, use_uncategorized_label
         output_file = os.path.join(data_dir, 'All Personal Posts.txt')
         post_file = found_files[POST_FILE]
         print(f"\nProcessing posts from: {post_file}")
-        run_script('extract_post_links.py', post_file, '--download' if begin_downloading else '')
         
-        # Move links file to data directory
-        links_file = os.path.join(os.path.dirname(post_file), 'links.txt')
-        if os.path.exists(links_file):
-            os.rename(links_file, output_file)
+        # Parse URLs first, writing directly to output file
+        run_script('parse_urls.py', post_file, '--output', output_file, capture_output=False)
+        
+        if os.path.exists(output_file):
+            with open(output_file, 'r') as f:
+                num_links = sum(1 for _ in f)
+            print(f"{num_links:,} posts found.")
 
 def main():
     # Get directory path
@@ -280,6 +282,10 @@ def main():
     # begin downloading sounds
     if 's' in to_process and begin_downloading:
         run_script('download_sounds.py', directory, capture_output=False)
+
+    # Run download_posts.py if downloading is requested
+    if 'p' in to_process and begin_downloading:
+        run_script('download_posts.py', directory, capture_output=False)
 
 if __name__ == '__main__':
     main() 

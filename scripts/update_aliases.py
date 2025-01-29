@@ -21,10 +21,12 @@ def generate_aliases(project_root):
         'ttcollection': 'scripts/fetch_collection_videos.py',
         'ttcollect': 'scripts/fetch_user_collections.py',
         'ttsplit': 'scripts/split_links.py',
-        'ttaudio': 'scripts/download_tiktok_audio.py',
+        'ttaudio': 'scripts/download_sounds.py',
         'ttsync': 'scripts/sync_to_remote.py',
         'ttphotos': 'scripts/download_slideshows.py',
-        'ttprep': 'scripts/prep.py'
+        'ttprep': 'scripts/prep.py',
+        'ttalias': 'scripts/update_aliases.py',
+        'ttposts': 'scripts/download_posts.py'
     }
     
     alias_lines = []

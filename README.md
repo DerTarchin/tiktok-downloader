@@ -516,41 +516,31 @@ The script will:
 - Create files named like "original_name (Part 1).txt", "original_name (Part 2).txt", etc.
 - Show progress and statistics for each file created
 
-### extract_post_links.py
+### download_posts.py
 
-A utility script to extract TikTok video links from text files containing TikTok metadata.
+Downloads TikTok posts from a text file containing post links.
 
 ```bash
-# Extract links from a single file (creates links.txt)
-python scripts/extract_post_links.py metadata.txt
-
-# Extract links from multiple files
-python scripts/extract_post_links.py file1.txt file2.txt file3.txt
-
-# Save links to custom filename
-python scripts/extract_post_links.py metadata.txt -o my_links.txt
-
-# Set minimum file size in KB (default: 500)
-python scripts/extract_post_links.py metadata.txt --min-size 1000
-
-# Download videos from extracted URLs
-python scripts/extract_post_links.py metadata.txt --download
+python scripts/download_posts.py metadata.txt
 ```
 
-The script will:
+Multiple input files:
 
-1. Extract TikTok links:
+```bash
+python scripts/download_posts.py file1.txt file2.txt file3.txt
+```
 
-   - Process each input file
-   - Save links to links.txt (or specified filename)
-   - Create separate output for each input file
-   - Handle multiple input files
+Specify output file:
 
-2. If --download is specified:
-   - Create directory named after input file
-   - Download videos from tiktokv.us URLs
-   - Save videos as "Video 1.mp4", "Video 2.mp4", etc.
-   - Skip non-tiktokv.us URLs
+```bash
+python scripts/download_posts.py metadata.txt -o my_links.txt
+```
+
+Download videos:
+
+```bash
+python scripts/download_posts.py metadata.txt --download
+```
 
 ### sync_to_remote.py
 
@@ -617,8 +607,9 @@ Available aliases:
 - `ttsync`: Sync to Google Drive
 - `tthelp`: Show all available commands
 - `ttprep`: Prepare TikTok collections for downloading
+- `ttalias`: Update TikTok Downloader aliases in ~/.zshrc
 
-After running the script, remember to:
+  After running the script, remember to:
 
 ```bash
 source ~/.zshrc  # Apply the changes
