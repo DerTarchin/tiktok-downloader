@@ -2,7 +2,7 @@
 
 import os
 import subprocess
-from .utils import extract_video_id, is_file_size_valid
+from .utils import extract_video_id, is_file_size_valid, MAX_FILENAME_LENGTH
 import re
 
 
@@ -21,7 +21,8 @@ class Validator:
                 'missing': {collection_name: set(missing_ids)},
                 'extra': {collection_name: {id: filename}},
                 'empty': {collection_name: {id: filename}},  # Files under 50kb
-                'invalid_name': {collection_name: {filename: full_path}}  # Files without extensions
+                'invalid_name': {collection_name: {filename: full_path}},  # Files without extensions
+                'too_long': {collection_name: {id: filename}}  # Files with filenames longer than MAX_FILENAME_LENGTH
             }
         """
         print("\nValidating downloads...")
@@ -30,7 +31,8 @@ class Validator:
             'missing': {},
             'extra': {},
             'empty': {},  # Files under 50kb
-            'invalid_name': {}  # Files without extensions
+            'invalid_name': {},  # Files without extensions
+            'too_long': {}  # Files with filenames longer than MAX_FILENAME_LENGTH
         }
         
         # Define video extensions at the start of the method
@@ -110,6 +112,7 @@ class Validator:
             extra_ids = {}  # Store extra IDs and filenames
             empty_files = {}  # Store zero-byte files
             invalid_files = {}  # Store files without extensions
+            too_long = {}  # Compute too_long files for confirmed videos
             
             # Check local folder if it exists
             if os.path.exists(collection_folder):
@@ -141,6 +144,10 @@ class Validator:
                     if not is_file_size_valid(file_size):
                         empty_files[file_id] = f"(local) {filename}"
                         continue
+                    
+                    # Check for files with too long filenames
+                    if len(filename) > MAX_FILENAME_LENGTH:
+                        too_long[file_id] = f"(local) {filename}"
                         
                     downloaded_ids.add(file_id)
                     downloaded_map[file_id] = f"(local) {filename}"
@@ -160,6 +167,8 @@ class Validator:
                         if not line:
                             i += 1
                             continue
+
+                        remote_dir = f"{self.gdrive_base_path}/{username}/{collection_name}"
 
                         # Try to parse as normal "size filename" format first
                         try:
@@ -200,7 +209,7 @@ class Validator:
 
                             # Check for multi-line filenames
                             if was_multiline:
-                                remote_path = f"{self.gdrive_base_path}/{username}/{collection_name}/{filename}"
+                                remote_path = f"{remote_dir}/{filename}"
                                 invalid_files[filename] = remote_path
                                 print(f"invalid file: {filename} (contains newline)")
                                 i += 1
@@ -208,7 +217,7 @@ class Validator:
                             
                             # If still no video extension, mark as invalid
                             if not filename.lower().endswith(video_extensions):
-                                remote_path = f"{self.gdrive_base_path}/{username}/{collection_name}/{filename}"
+                                remote_path = f"{remote_dir}/{filename}"
                                 invalid_files[filename] = remote_path
                                 print(f"invalid file: {filename}")
                                 i += 1
@@ -234,6 +243,10 @@ class Validator:
                         if file_size != -1 and not is_file_size_valid(file_size):
                             empty_files[file_id] = f"(remote) {filename}"
                             continue
+
+                        # Check for files with too long filenames
+                        if len(filename) > MAX_FILENAME_LENGTH:
+                            too_long[file_id] = f"(remote) {filename}"
                             
                         downloaded_ids.add(file_id)
                         downloaded_map[file_id] = f"(remote) {filename}"
@@ -279,6 +292,8 @@ class Validator:
                 validation_results['empty'][collection_name] = empty_files
             if invalid_files:
                 validation_results['invalid_name'][collection_name] = invalid_files
+            if too_long:
+                validation_results['too_long'][collection_name] = too_long
             
             # Report findings
             if extra_ids:
@@ -302,10 +317,17 @@ class Validator:
                 for filename, path in invalid_files.items():
                     print(f"\t{filename} at {path}")
             
-            if not (extra_ids or missing_ids or empty_files or invalid_files):
+            if too_long:
+                print(f"{len(too_long):,} files with too long filenames detected:")
+                for _, filename in too_long.items():
+                    print(f"\t[{len(filename)} chars]\t{filename}")
+            
+            if not (extra_ids or missing_ids or empty_files or invalid_files or too_long):
                 print(f"✓ All videos accounted for in {collection_name}")
                 print(f"  Total unique IDs in text file: {len(expected_ids):,}")
                 print(f"  Downloaded: {len(downloaded_ids):,}")
                 print(f"  In error log: {len(error_ids):,}") 
+            else:
+                print(f"Total expected videos: {len(expected_ids):,}")
         
         return validation_results 

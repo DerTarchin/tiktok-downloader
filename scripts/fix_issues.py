@@ -5,6 +5,7 @@ import sys
 import subprocess
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -192,7 +193,7 @@ def process_files(file_type, results, args, file_handler, videos_to_move):
                 continue
 
             if not args.allow_delete:
-                print(f"Skipping extra video {video_id} from {collection} (use --allow-delete to delete)")
+                print(f"Skipping {file_type} video {video_id} from {collection} (use --allow-delete to delete)")
                 update_progress()
                 continue
 
@@ -217,6 +218,74 @@ def process_files(file_type, results, args, file_handler, videos_to_move):
                     remove_from_success_log(file_handler.success_log_path, video_id)
 
                 update_progress()
+
+def process_single_too_long_file(video_id, file_info, args, collection):
+    """Helper function to process a single file with too long filename."""
+    try:
+        try:
+            _, filename = file_info.split(' ', 1)  # remove (local) or (remote) prefix
+        except ValueError:
+            filename = file_info
+        current_length = len(filename)
+
+        # Find the position of video_id in the filename (without extension)
+        base, ext = os.path.splitext(filename)
+        pos = base.rfind(video_id)
+        if pos == -1:
+            print(f"Unable to locate video ID {video_id} in filename '{filename}', skipping rename.")
+            return
+        
+        prefix = base[:pos]
+        suffix = base[pos:] + ext  # ensure video_id and extension remain
+        max_prefix_length = MAX_FILENAME_LENGTH - len(suffix)
+        candidate_prefix = prefix[:max_prefix_length]
+        if candidate_prefix and not candidate_prefix.endswith(" "):
+            space_pos = candidate_prefix.rfind(" ")
+            if space_pos != -1:
+                final_prefix = candidate_prefix[:space_pos+1]
+            else:
+                # No space found, trim one char and add a space
+                final_prefix = candidate_prefix[:-1] + " "
+        else:
+            final_prefix = candidate_prefix
+        new_filename = final_prefix + suffix
+        print(f"Filename length {current_length} for\n\t'{filename}'.\n->\t'{new_filename}'")
+        
+        if file_info.startswith('(remote)'):
+            base_dir = f"{args.gdrive_base_path}/{os.path.basename(args.input_path)}/{collection}"
+            src_path = f"{base_dir}/{filename}"
+            dest_path = f"{base_dir}/{new_filename}"
+            is_remote = True
+        else:
+            src_path = os.path.join(args.input_path, collection, filename)
+            dest_path = os.path.join(args.input_path, collection, new_filename)
+            is_remote = False
+        
+        if not args.dry_run:
+            if move_video(src_path, dest_path, video_id, is_remote):
+                print(f"Successfully renamed video {video_id}")
+            else:
+                print(f"Failed to rename video {video_id}")
+        update_progress()
+    except Exception as e:
+        print(f"Error renaming video {video_id}: {e}")
+
+def process_too_long_files(results, args):
+    """Process files whose filenames exceed MAX_FILENAME_LENGTH and rename them in parallel using 15 concurrent tasks."""
+    if 'too_long' not in results or not results['too_long']:
+        return
+    print(f"\nProcessing files with filenames over {MAX_FILENAME_LENGTH} characters...")
+
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        futures = []
+        for collection, files in results['too_long'].items():
+            print(f"\nProcessing files in {collection}...")
+            for video_id, file_info in files.items():
+                futures.append(executor.submit(process_single_too_long_file, video_id, file_info, args, collection))
+
+        for future in as_completed(futures):
+            # This will raise any exceptions encountered in the worker functions
+            future.result()
 
 def main():
     global total_videos
@@ -315,11 +384,12 @@ def main():
                 print(f"Removing video {video_id} from download success log")
                 if not args.dry_run:
                     remove_from_success_log(file_handler.success_log_path, video_id)
-    
-    # Process remaining extra, empty, and invalid files
+
+    # Process remaining extra, empty, too_long, and invalid files
     process_files('extra', results, args, file_handler, videos_to_move)
     process_files('empty', results, args, file_handler, videos_to_move)
     process_files('invalid_name', results, args, file_handler, videos_to_move)
+    process_too_long_files(results, args)
 
     if args.dry_run:
         print("\nThis was a dry run. No changes were made.")
@@ -351,6 +421,12 @@ def main():
                 for collection, empty_files in final_results['empty'].items():
                     print(f"\n{collection}:")
                     for video_id, file_info in empty_files.items():
+                        print(f"  - {video_id} ({file_info})")
+            if final_results.get('too_long', {}):
+                print("\nStill have files with too long filenames:")
+                for collection, too_long_files in final_results['too_long'].items():
+                    print(f"\n{collection}:")
+                    for video_id, file_info in too_long_files.items():
                         print(f"  - {video_id} ({file_info})")
 
 if __name__ == '__main__':
