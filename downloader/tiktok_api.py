@@ -6,6 +6,20 @@ import time
 import os
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get environment variables
+cookies = os.getenv('COOKIES', '')
+if not cookies:
+    raise ValueError("COOKIES environment variable not found in .env file")
+lastWebId = os.getenv('LAST_WEB_ID', '')
+if not lastWebId:
+    raise ValueError("LAST_WEB_ID environment variable not found in .env file")
+
 
 # Common API endpoints
 ENDPOINTS = {
@@ -30,12 +44,12 @@ DEFAULT_HEADERS = {
     'sec-fetch-mode': 'cors',
     'sec-fetch-site': 'same-origin',
     'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'cookie': 'tt_csrf_token=oLYm7iAm-Sk-5Mqh9QPmlZmALT5f8BtUvgN8; ttwid=1%7CY0bPNKnk7H5_h1_Ae14weHqb9UUlsvx5tUzhMv5MRZM%7C1736602635%7Ca3401329d4e1544ba012dcc84f6d7b28936e94d8a86284fc875d1107894825b3; tt_chain_token=RV+6Ty1aLXvN+Yep6o+0Bw=='
+    'cookie': cookies
 }
 
 # Common base parameters for all requests
 BASE_PARAMS = {
-    'WebIdLastTime': '1736602635',
+    'WebIdLastTime': lastWebId,
     'aid': '1988',
     'app_language': 'en',
     'app_name': 'tiktok_web',
