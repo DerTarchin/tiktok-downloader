@@ -3,9 +3,8 @@
 import os
 import subprocess
 from threading import Lock
-from .utils import get_filename_suffix
+from .utils import get_filename_suffix, MAX_FILENAME_LENGTH
 
-MAX_FILENAME_LENGTH = 70
 
 class YtDlpHandler:
     def __init__(self):

@@ -12,7 +12,7 @@ sys.path.insert(0, project_root)
 
 import argparse
 from downloader.validator import Validator
-from downloader.utils import extract_video_id
+from downloader.utils import extract_video_id, MAX_FILENAME_LENGTH
 from downloader.file_handler import FileHandler
 
 # Global variables for progress tracking

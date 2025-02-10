@@ -13,16 +13,14 @@ from webdriver_manager.firefox import GeckoDriverManager
 import subprocess
 from urllib.parse import urlparse
 import signal
-import threading
 
-from .utils import clean_filename, extract_video_id, get_filename_suffix, log_worker, is_file_size_valid
+from .utils import clean_filename, extract_video_id, get_filename_suffix, log_worker, is_file_size_valid, MAX_FILENAME_LENGTH
 
 # Define constants for wait times
 MAX_WAIT_TIME_PART_FILE = 90  # Maximum wait time for .part files in seconds
 MAX_WAIT_TIME_SHORT = 5  # Maximum wait time for no file size change or download started in seconds
 MAX_WAIT_TIME_RENDER = 90  # Maximum wait time for photo render completion
 
-MAX_FILENAME_LENGTH = 70
 
 # Install geckodriver once at module level
 _geckodriver_path = None

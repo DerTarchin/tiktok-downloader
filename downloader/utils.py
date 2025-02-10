@@ -9,6 +9,7 @@ import sys
 
 SPLIT_SIZE = 500  # Maximum number of URLs per split file
 FILE_SIZE_THRESHOLD_KB = 50 # Minimum file size in KB
+MAX_FILENAME_LENGTH = 70
 
 
 def clean_filename(name):
