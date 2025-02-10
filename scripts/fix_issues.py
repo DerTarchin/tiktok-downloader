@@ -335,7 +335,8 @@ def main():
         (len(videos_to_move) if not args.skip_move else 0) + 
         sum(len(videos) for videos in results['extra'].values()) +
         sum(len(videos) for videos in results['empty'].values()) +
-        sum(len(videos) for videos in results['invalid_name'].values())
+        sum(len(videos) for videos in results['invalid_name'].values()) +
+        sum(len(videos) for videos in results['too_long'].values())
     )
 
     print(f"\nStarting to process {total_videos:,} videos...")
