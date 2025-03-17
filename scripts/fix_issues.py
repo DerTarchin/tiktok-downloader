@@ -237,7 +237,7 @@ def process_single_too_long_file(video_id, file_info, args, collection):
         
         prefix = base[:pos]
         suffix = base[pos:] + ext  # ensure video_id and extension remain
-        max_prefix_length = MAX_FILENAME_LENGTH - len(suffix)
+        max_prefix_length = MAX_FILENAME_LENGTH # suffix doesn't count towards max length
         candidate_prefix = prefix[:max_prefix_length]
         if candidate_prefix and not candidate_prefix.endswith(" "):
             space_pos = candidate_prefix.rfind(" ")

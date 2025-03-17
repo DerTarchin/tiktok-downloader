@@ -412,11 +412,26 @@ def print_final_summary(input_path, file_handler):
     
     # Get total size of remote directory for this user
     total_size = 0
+    username = os.path.basename(input_path if os.path.isdir(input_path) 
+                              else os.path.dirname(input_path))
+    remote_path = f"gdrive:/TikTok Archives/{username}"
+    
+    # Generate shareable link for Google Drive
+    drive_link = ""
     try:
-        username = os.path.basename(input_path if os.path.isdir(input_path) 
-                                  else os.path.dirname(input_path))
-        remote_path = f"gdrive:/TikTok Archives/{username}"
+        # Run rclone link command to get a shareable link
+        result = subprocess.run(['rclone', 'link', remote_path], 
+                              capture_output=True, text=True)
         
+        if result.returncode == 0:
+            drive_link = result.stdout.strip()
+        else:
+            drive_link = "Unable to generate link (please contact support)"
+    except Exception as e:
+        drive_link = f"Unable to generate link: {str(e)}"
+    
+    # Get size information
+    try:
         result = subprocess.run(['rclone', 'size', remote_path], 
                               capture_output=True, text=True)
         
@@ -437,34 +452,52 @@ def print_final_summary(input_path, file_handler):
     except Exception as e:
         total_size = f"Unable to determine: {str(e)}"
     
-    # Convert total_size to a float for comparison
-    try:
-        size_value = float(total_size.replace("GB", "").strip())
-    except ValueError:
-        size_value = 0  # Default to 0 if conversion fails
-
-    # Create summary text
-    summary_text = "\n" + "="*50 + "\n"
-    summary_text += "FINAL SUMMARY\n"
-    summary_text += "="*50 + "\n"
-    summary_text += f"Total videos downloaded: {success_count:,}\n"
+    # Create clean stats summary without visual flair
+    stats_summary = f"Total videos downloaded: {success_count:,}\n"
     if total_private > 0:
-        summary_text += f"Total private videos: {total_private:,} (I can't download these, sorry)\n"
+        stats_summary += f"Total private videos: {total_private:,} (I can't download these, sorry)\n"
     else:
-        summary_text += "Total private videos: 0\n"
-    summary_text += f"Total failed: {total_failed:,}\n"
-    summary_text += f"Total size: {total_size}\n"
-    summary_text += "="*50 + "\n"
+        stats_summary += "Total private videos: 0\n"
+    stats_summary += f"Total failed: {total_failed:,}\n"
+    stats_summary += f"Total size: {total_size}"
+    
+    # Create the new user-friendly message
+    friendly_message = "\nGreat news! Your videos are ready 😊🎉\n"
+    friendly_message += "Here's the TEMPORARY link to them in google drive, IT WILL NOT EXIST IN A DAY OR SO unless you need more time to download them:\n\n"
+    friendly_message += f"{drive_link}\n\n"
+    friendly_message += f"{stats_summary}\n\n"
+    friendly_message += "You can download them from there and save them to your computer. Please do so as soon as you can, "
+    friendly_message += "and let me know when you're done, because I'd like to have that space available again to help other TikTokers\n\n"
+    friendly_message += "And I suggest you download folder-by-folder instead of downloading the entire archive at once, "
+    friendly_message += "because it's easier to manage smaller downloads at a time.\n\n"
+    friendly_message += "Here's where you can find the download buttons:\n"
+    friendly_message += "https://imgur.com/a/wRT1Zawa\n"
     
     # Print to console
-    print(summary_text)
+    print(friendly_message)
+    
+    # Also save the original detailed summary for logging purposes
+    detailed_summary = "\n" + "="*50 + "\n"
+    detailed_summary += "FINAL SUMMARY\n"
+    detailed_summary += "="*50 + "\n"
+    detailed_summary += f"Total videos downloaded: {success_count:,}\n"
+    if total_private > 0:
+        detailed_summary += f"Total private videos: {total_private:,} (I can't download these, sorry)\n"
+    else:
+        detailed_summary += "Total private videos: 0\n"
+    detailed_summary += f"Total failed: {total_failed:,}\n"
+    detailed_summary += f"Total size: {total_size}\n"
+    detailed_summary += f"Google Drive link: {drive_link}\n"
+    detailed_summary += "="*50 + "\n"
     
     # Save to file (in current directory instead of parent)
     summary_path = os.path.join(input_path if os.path.isdir(input_path) 
                                else os.path.dirname(input_path), "summary.log")
     with open(summary_path, 'w') as f:
-        f.write(summary_text)
-    
+        f.write(detailed_summary)
+        f.write("\n\nUser-friendly message:\n\n")
+        f.write(friendly_message)
+
 def split_urls_by_type(urls):
     """
     Split URLs into video and photo URLs.

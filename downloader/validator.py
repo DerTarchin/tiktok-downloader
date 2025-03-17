@@ -5,6 +5,7 @@ import subprocess
 from .utils import extract_video_id, is_file_size_valid, MAX_FILENAME_LENGTH
 import re
 
+MAX_FILENAME_WITH_ID_AND_EXTENSION_LENGTH = MAX_FILENAME_LENGTH + 23
 
 class Validator:
     def __init__(self, gdrive_base_path="gdrive:/TikTok Archives"):
@@ -146,7 +147,7 @@ class Validator:
                         continue
                     
                     # Check for files with too long filenames
-                    if len(filename) > MAX_FILENAME_LENGTH:
+                    if len(filename) > MAX_FILENAME_WITH_ID_AND_EXTENSION_LENGTH:
                         too_long[file_id] = f"(local) {filename}"
                         
                     downloaded_ids.add(file_id)
@@ -245,7 +246,7 @@ class Validator:
                             continue
 
                         # Check for files with too long filenames
-                        if len(filename) > MAX_FILENAME_LENGTH:
+                        if len(filename) > MAX_FILENAME_WITH_ID_AND_EXTENSION_LENGTH:
                             too_long[file_id] = f"(remote) {filename}"
                             
                         downloaded_ids.add(file_id)
