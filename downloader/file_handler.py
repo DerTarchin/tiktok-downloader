@@ -6,13 +6,14 @@ import fcntl
 import time
 
 class FileHandler:
-    def __init__(self, input_path):
+    def __init__(self, input_path, check_any_downloaded_instance=False):
         self.input_path = input_path
         self.error_prefix = "[error log] "
         self.success_log_file = "download_success.log"
         self.all_saves_file = "Favorite Videos (URLs).txt"
         self.all_saves_name = "All Uncategorized Favorites"
-        
+        self.check_any_downloaded_instance = check_any_downloaded_instance
+
         # Set success_log_path based on input directory
         if os.path.isfile(input_path):
             self.success_log_path = os.path.join(os.path.dirname(input_path), self.success_log_file)
@@ -50,7 +51,7 @@ class FileHandler:
                             if None not in cache:
                                 cache[None] = set()
                             cache[None].add(extract_video_id(line))
-                    
+
                     self._success_log_cache = cache
                     self._last_cache_update = mtime
         except Exception as e:
@@ -195,7 +196,8 @@ class FileHandler:
         self._update_success_log_cache()
             
         # For uncategorized links, match against any instance
-        if not collection_name:
+        print(f"checking url {url} for any downloaded instance, collection_name: {collection_name}, check_any_downloaded_instance: {self.check_any_downloaded_instance}")
+        if not collection_name or self.check_any_downloaded_instance:
             return any(current_video_id in video_ids 
                      for video_ids in self._success_log_cache.values())
         

@@ -28,7 +28,7 @@ def main():
     parser.add_argument('--skip-sync', action='store_true', help='Skip synchronization step')
     parser.add_argument('--concurrent-selenium', type=int, help='Number of concurrent Selenium downloads (defaults to --concurrent value)')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
-
+    parser.add_argument('--use-legacy-success-log', action='store_true', help='Use legacy success log (when it didn\'t track downloads by collection)')
     args = parser.parse_args()
 
     # Get the input path and check for flags
@@ -40,7 +40,7 @@ def main():
     skip_private = args.skip_private
     skip_sync = args.skip_sync
     verbose = args.verbose
-    
+    check_any_downloaded_instance = args.use_legacy_success_log
     # Parse concurrent downloads setting
     concurrent_downloads = args.concurrent
     if concurrent_downloads < 1:
@@ -52,7 +52,7 @@ def main():
         selenium_concurrent = 1
     
     # Initialize handlers
-    file_handler = FileHandler(input_path)
+    file_handler = FileHandler(input_path, check_any_downloaded_instance=check_any_downloaded_instance)
     
     # Create base temp download directory
     if os.path.isfile(input_path):

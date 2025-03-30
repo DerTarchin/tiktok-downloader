@@ -46,11 +46,16 @@ def get_audio_download_link(driver, tiktok_url, max_retries=3):
             submit_btn.click()
             
             # Wait for the MP3 download button
-            download_link = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "a.btn.waves-effect.waves-light.orange.download[data-event='mp3_download_click']"))
+            # download_link = WebDriverWait(driver, 20).until(
+            #     EC.presence_of_element_located((By.CSS_SELECTOR, "a.btn.waves-effect.waves-light.orange.download[data-event='mp3_download_click']"))
+            # )
+            # return download_link.get_attribute('href')
+
+            # Wait for and find the audio source element
+            download_link = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "audio source[type='audio/mpeg']"))
             )
-            
-            return download_link.get_attribute('href')
+            return download_link.get_attribute('src')
             
         except TimeoutException:
             print(f"Timeout while processing {tiktok_url}")
@@ -447,22 +452,23 @@ def main():
                 
                 # Process completed tasks
                 for future in concurrent.futures.as_completed(future_to_link):
+                    link = future_to_link[future]
+                    worker_number = (links.index(link) % len(drivers)) + 1
                     try:
                         success, link = future.result()
                         if success:
                             session_successful_downloads.append(link)
                             if verbose:
-                                print(f"[Worker {i % len(drivers) + 1}] Successfully downloaded: {link}")
+                                print(f"[Worker {worker_number}] Successfully downloaded: {link}")
                             log_success(link)
                             remove_from_failed(link)
                         else:
                             session_failed_links.append(link)
-                            print(f"[Worker {i % len(drivers) + 1}] Failed to download: {link}")
+                            print(f"[Worker {worker_number}] Failed to download: {link}")
                             log_failure(link)
                     except Exception as e:
-                        link = future_to_link[future]
                         session_failed_links.append(link)
-                        print(f"[Worker {i % len(drivers) + 1}] Exception occurred while processing {link}: {str(e)}")
+                        print(f"[Worker {worker_number}] Exception occurred while processing {link}: {str(e)}")
                         log_failure(link)
         
         finally:
