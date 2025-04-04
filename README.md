@@ -608,6 +608,7 @@ Available aliases:
 - `tthelp`: Show all available commands
 - `ttprep`: Prepare TikTok collections for downloading
 - `ttalias`: Update TikTok Downloader aliases in ~/.zshrc
+- `ttreposts`: Fetch user reposts
 
   After running the script, remember to:
 
@@ -656,3 +657,31 @@ The script integrates with other tools in the toolkit:
 - Uses download_sounds.py for sound downloads
 - Uses dedupe_links.py for duplicate removal
 - Uses count_videos_to_download.py for final statistics
+
+### fetch_user_reposts.py
+
+A utility script to fetch TikTok user reposts using their web API.
+
+```bash
+# Basic usage (saves to reposts_[username].txt in current directory)
+python scripts/fetch_user_reposts.py username
+
+# Specify custom output file
+python scripts/fetch_user_reposts.py username --output-file my_reposts.txt
+
+# Continue from a specific cursor
+python scripts/fetch_user_reposts.py username --cursor "123456"
+
+# Add delay between requests (in seconds)
+python scripts/fetch_user_reposts.py username --delay 1
+```
+
+The script will:
+
+- Connect to TikTok's web API
+- Read existing URLs from output file if it exists
+- Fetch all reposted video IDs from the specified user
+- Only add new unique URLs to avoid duplicates
+- Add optional delay between requests to avoid rate limiting
+- Display progress and statistics
+- Save URLs to a file named `reposts_[username].txt` in the current working directory by default

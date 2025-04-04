@@ -25,7 +25,8 @@ if not lastWebId:
 ENDPOINTS = {
     'collection_items': 'https://www.tiktok.com/api/collection/item_list/',
     'collection_list': 'https://www.tiktok.com/api/user/collection_list/',
-    'user_detail': 'https://www.tiktok.com/api/user/detail/'
+    'user_detail': 'https://www.tiktok.com/api/user/detail/',
+    'user_reposts': 'https://www.tiktok.com/api/repost/item_list/'
 }
 
 # Common headers for all requests
@@ -390,6 +391,8 @@ def fetch_collections(username: str, delay: float = 0, directory_path: Optional[
                 if hasattr(e, 'response'):
                     print(f"Response content: {e.response.content}")
                 
+                print("\n| PLEASE NOTE\n| Ensure the user's account is public and the desired collections are all public\n")
+                
                 time.sleep(current_backoff)
                 current_backoff = min(current_backoff * 2 + (time.time() % 1), MAX_BACKOFF)
                 retry_count += 1
@@ -406,4 +409,114 @@ def fetch_collections(username: str, delay: float = 0, directory_path: Optional[
         print(f"Error fetching collections: {e}")
         if hasattr(e, 'response'):
             print(f"Response content: {e.response.content}")
-        raise 
+        raise
+
+def get_repost_params(sec_uid: str, cursor: str = "0") -> Dict:
+    """Get parameters for user reposts request."""
+    return {
+        'WebIdLastTime': '1743792041',
+        'aid': '1988',
+        'app_language': 'en',
+        'app_name': 'tiktok_web',
+        'browser_language': 'en-US',
+        'browser_name': 'Mozilla',
+        'browser_online': 'true',
+        'browser_platform': 'MacIntel',
+        'browser_version': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+        'channel': 'tiktok_web',
+        'cookie_enabled': 'true',
+        'count': '30',
+        'coverFormat': '2',
+        'cursor': cursor,
+        'data_collection_enabled': 'false',
+        'device_id': '7489529760793314858',
+        'device_platform': 'web_pc',
+        'focus_state': 'true',
+        'from_page': 'user',
+        'history_len': '2',
+        'is_fullscreen': 'true',
+        'is_page_visible': 'true',
+        'language': 'en',
+        'needPinnedItemIds': 'true',
+        'odinId': '7489529763972219947',
+        'os': 'mac',
+        'post_item_list_request_type': '0',
+        'priority_region': '',
+        'referer': '',
+        'region': 'US',
+        'screen_height': '1329',
+        'screen_width': '2056',
+        'secUid': sec_uid,
+        'tz_name': 'America/New_York',
+        'user_is_login': 'false',
+        'webcast_language': 'en'
+    }
+
+def fetch_user_reposts(sec_uid: str, session: Optional[requests.Session] = None, cursor: str = "0", existing_count: int = 0, delay: float = 0) -> List[str]:
+    """
+    Fetch all video IDs from a user's reposts using their web API.
+    
+    Args:
+        sec_uid: secUid of the TikTok user
+        session: Optional requests.Session to use for requests
+        cursor: Optional cursor to start fetching from
+        existing_count: Number of existing items when resuming from a cursor
+        delay: Optional delay between requests in seconds (default: 0)
+        
+    Returns:
+        List of video IDs from the user's reposts
+    """
+    if session is None:
+        session = requests.Session()
+    
+    has_more = True
+    video_ids = []
+    # Calculate starting page number based on cursor (assuming increments of 30)
+    page = (int(cursor) // 30) + 1
+
+    print(f"Fetching reposts for user {sec_uid} starting from cursor {cursor}...")
+    
+    while has_more:
+        params = get_repost_params(sec_uid, cursor)
+        
+        try:
+            # Add delay if specified
+            if delay > 0 and len(video_ids) > 0:  # Don't delay on first request
+                time.sleep(delay)
+            
+            response = session.get(
+                ENDPOINTS['user_reposts'],
+                params=params,
+                headers=DEFAULT_HEADERS
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract items from response
+            items = data.get("itemList", [])
+            if not items:
+                print("No more items found")
+                break
+                
+            # Process items
+            for item in items:
+                video_id = item.get("id")
+                if video_id:
+                    video_ids.append(video_id)
+            
+            # Update cursor and has_more
+            cursor = str(data.get("cursor", "0"))
+            has_more = data.get("hasMore", False)
+            
+            # Print progress
+            total_fetched = len(video_ids) + existing_count
+            print(f"Page {page}: Fetched {len(video_ids)} new videos (Total: {total_fetched})")
+            page += 1
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching page {page}: {e}")
+            if hasattr(e, 'response'):
+                print(f"Response content: {e.response.content}")
+            break
+            
+    return video_ids

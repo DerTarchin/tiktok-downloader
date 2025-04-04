@@ -26,7 +26,8 @@ def generate_aliases(project_root):
         'ttphotos': 'scripts/download_slideshows.py',
         'ttprep': 'scripts/prep.py',
         'ttalias': 'scripts/update_aliases.py',
-        'ttposts': 'scripts/download_posts.py'
+        'ttposts': 'scripts/download_posts.py',
+        'ttreposts': 'scripts/fetch_user_reposts.py'
     }
     
     alias_lines = []

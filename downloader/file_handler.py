@@ -196,7 +196,6 @@ class FileHandler:
         self._update_success_log_cache()
             
         # For uncategorized links, match against any instance
-        print(f"checking url {url} for any downloaded instance, collection_name: {collection_name}, check_any_downloaded_instance: {self.check_any_downloaded_instance}")
         if not collection_name or self.check_any_downloaded_instance:
             return any(current_video_id in video_ids 
                      for video_ids in self._success_log_cache.values())
