@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import os
+from .utils import decompress_response, get_response_json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -34,7 +35,7 @@ DEFAULT_HEADERS = {
     'authority': 'www.tiktok.com',
     'accept': '*/*',
     'accept-language': 'en-US,en;q=0.9',
-    'accept-encoding': 'gzip, deflate, br, zstd',
+    'accept-encoding': 'gzip, deflate, br',
     'dnt': '1',
     'pragma': 'no-cache',
     'cache-control': 'no-cache',
@@ -110,15 +111,16 @@ def get_user_info(username: str, session: Optional[requests.Session] = None) -> 
     
     try:
         # First get the user's page to extract secUid
+        headers = {**DEFAULT_HEADERS, 'accept-encoding': 'identity'}
         response = session.get(
             f'https://www.tiktok.com/@{username}',
-            headers=DEFAULT_HEADERS,
+            headers=headers,
             allow_redirects=True
         )
         response.raise_for_status()
         
         # Look for secUid in the page content
-        content = response.text
+        content = decompress_response(response)
         sec_uid_match = re.search(r'"secUid":"([^"]+)"', content)
         user_id_match = re.search(r'"id":"(\d+)"', content)
         
@@ -146,7 +148,7 @@ def get_user_info(username: str, session: Optional[requests.Session] = None) -> 
         )
         api_response.raise_for_status()
         
-        data = api_response.json()
+        data = get_response_json(api_response)
         user = data.get('userInfo', {}).get('user', {})
         
         if user:
@@ -236,7 +238,7 @@ def fetch_collection_items(collection_id: str, session: Optional[requests.Sessio
                 headers=DEFAULT_HEADERS
             )
             response.raise_for_status()
-            data = response.json()
+            data = get_response_json(response)
             
             # Extract items from response
             items = data.get("itemList", [])
@@ -346,7 +348,7 @@ def fetch_collections(username: str, delay: float = 0, directory_path: Optional[
                 )
                 response.raise_for_status()
                 
-                data = response.json()
+                data = get_response_json(response)
                 
                 # Check for rate limit or error response
                 if data.get('statusCode') == 10101 or response.status_code == 500:
@@ -490,7 +492,7 @@ def fetch_user_reposts(sec_uid: str, session: Optional[requests.Session] = None,
                 headers=DEFAULT_HEADERS
             )
             response.raise_for_status()
-            data = response.json()
+            data = get_response_json(response)
             
             # Extract items from response
             items = data.get("itemList", [])

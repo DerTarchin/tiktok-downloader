@@ -5,6 +5,8 @@ webdriver-manager>=4.0.1
 yt-dlp>=2023.11.16
 requests>=2.31.0
 urllib3<2.0.0
+brotli>=1.0.0
+zstandard>=0.21.0
 
 # System dependencies (install via package manager)
 # Firefox browser: Required for Selenium

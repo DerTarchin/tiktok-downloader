@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 import time
 import subprocess
 import sys
+import json
+from typing import Union
 
 SPLIT_SIZE = 500  # Maximum number of URLs per split file
 FILE_SIZE_THRESHOLD_KB = 50 # Minimum file size in KB
@@ -583,3 +585,120 @@ def filter_links_against_collections(links, collection_paths):
             filtered_links.append(link)
     
     return filtered_links
+
+def decompress_response(response) -> str:
+    """
+    Decompress a response based on its content-encoding header.
+    Handles brotli, zstd, gzip, deflate, and identity encodings.
+    Also attempts to detect and decompress brotli/zstd even if header is missing.
+    
+    Args:
+        response: requests.Response object
+        
+    Returns:
+        str: Decompressed and decoded text content
+        
+    Raises:
+        ImportError: If required decompression libraries are not installed
+    """
+    # Get raw content - requests handles gzip/deflate automatically, but not brotli/zstd
+    raw = response.content
+    encoding = response.headers.get("content-encoding", "").lower()
+    
+    # Helper function to check if data looks like valid UTF-8 text/JSON
+    def is_valid_text(data: bytes) -> bool:
+        try:
+            decoded = data.decode("utf-8")
+            if len(decoded) == 0:
+                return False
+            # Check if it looks like JSON or text (mostly printable characters)
+            sample = decoded[:200] if len(decoded) > 200 else decoded
+            printable_count = sum(1 for c in sample if c.isprintable() or c.isspace() or c in '{}[]":,')
+            return printable_count / len(sample) > 0.7
+        except:
+            return False
+    
+    # Check if libraries are available
+    brotli_available = False
+    zstd_available = False
+    
+    try:
+        import brotli
+        brotli_available = True
+    except ImportError:
+        pass
+    
+    try:
+        import zstandard as zstd
+        zstd_available = True
+    except ImportError:
+        pass
+    
+    # Try brotli decompression (most common for TikTok API)
+    # Try it first regardless of header, as TikTok often sends br without proper header
+    if brotli_available:
+        try:
+            import brotli
+            decompressed = brotli.decompress(raw)
+            # Always return decompressed data - validation might be too strict
+            return decompressed.decode("utf-8", errors="replace")
+        except Exception as e:
+            # Decompression failed - might not be brotli, try other methods
+            # Don't log here as this is expected for non-brotli data
+            pass
+    
+    # Try zstd decompression
+    if zstd_available:
+        try:
+            import zstandard as zstd
+            decompressor = zstd.ZstdDecompressor()
+            decompressed = decompressor.decompress(raw)
+            # Always return decompressed data
+            return decompressed.decode("utf-8", errors="replace")
+        except Exception:
+            # Decompression failed - might not be zstd
+            pass
+    
+    # Check if raw content is already valid text (requests may have decompressed gzip/deflate)
+    if is_valid_text(raw):
+        try:
+            return raw.decode("utf-8", errors="replace")
+        except Exception:
+            pass
+    
+    # If we get here and data looks compressed but libraries aren't available, raise error
+    if not brotli_available and not zstd_available:
+        # Check if data looks compressed (binary, not text)
+        if not is_valid_text(raw):
+            raise ImportError(
+                "Response appears to be compressed (brotli/zstd) but required libraries are not installed. "
+                "Please install: pip install brotli zstandard"
+            )
+    
+    # Last resort: decode as latin-1 (preserves all bytes, but might produce garbage)
+    return raw.decode("latin-1", errors="replace")
+
+def get_response_json(response) -> Union[dict, list]:
+    """
+    Get JSON data from a response, handling decompression automatically.
+    
+    Args:
+        response: requests.Response object
+        
+    Returns:
+        dict or list: Parsed JSON data
+        
+    Raises:
+        ValueError: If response is not valid JSON after decompression
+    """
+    text = decompress_response(response)
+    
+    # Validate that we got valid JSON (starts with { or [)
+    text_stripped = text.strip()
+    if not text_stripped or (not text_stripped.startswith('{') and not text_stripped.startswith('[')):
+        raise ValueError(f"Response is not valid JSON. First 200 chars: {text[:200]!r}")
+    
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse JSON: {e}. First 200 chars: {text[:200]!r}")
