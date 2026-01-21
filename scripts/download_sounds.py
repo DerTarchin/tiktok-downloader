@@ -90,7 +90,7 @@ def format_filename(original_filename, music_id):
         ext = '.mp3'  # Default extension
     
     # Limit base name to 70 chars
-    base_name = base_name[:70].rstrip()
+    base_name = base_name[:70].rstrip().replace('.mp3', '')
     
     # Prefix with underscore if base name starts with a period
     if base_name.startswith('.'):
